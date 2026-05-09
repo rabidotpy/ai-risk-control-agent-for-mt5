@@ -1,0 +1,993 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>
+      BWG MT5 AI Risk Agent — Kickoff with Alex / 与 Alex 的开工沟通 — v9
+    </title>
+    <style>
+      :root {
+        --bg: #0f1419;
+        --panel: #1a2028;
+        --panel-2: #232b36;
+        --text: #e6edf3;
+        --muted: #8b949e;
+        --accent: #58a6ff;
+        --accent-2: #79c0ff;
+        --warn: #f0883e;
+        --danger: #ff7b72;
+        --ok: #56d364;
+        --border: #30363d;
+        --code-bg: #0d1117;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.7;
+        font-size: 15px;
+      }
+      header {
+        background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+        border-bottom: 1px solid var(--border);
+        padding: 28px 48px;
+      }
+      header h1 {
+        margin: 0 0 6px 0;
+        font-size: 26px;
+        color: var(--accent-2);
+      }
+      header h2 {
+        margin: 0 0 10px 0;
+        font-size: 20px;
+        color: var(--warn);
+        font-weight: 600;
+      }
+      header .meta {
+        color: var(--muted);
+        font-size: 13.5px;
+      }
+      header .meta span {
+        margin-right: 18px;
+      }
+      main {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 24px 48px 80px;
+      }
+
+      section.bilingual {
+        margin: 24px 0;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        background: var(--panel);
+      }
+      section.bilingual > h2 {
+        margin: 0;
+        padding: 14px 24px;
+        background: var(--panel-2);
+        color: var(--accent-2);
+        font-size: 17px;
+        border-bottom: 1px solid var(--border);
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0;
+      }
+      .col {
+        padding: 18px 24px;
+        min-width: 0;
+      }
+      .col.en {
+        border-right: 1px solid var(--border);
+      }
+      .col h3 {
+        margin: 0 0 10px 0;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        color: var(--muted);
+      }
+      .col.en h3 {
+        color: #79c0ff;
+      }
+      .col.zh h3 {
+        color: #f0883e;
+      }
+
+      p {
+        margin: 8px 0;
+      }
+      ul,
+      ol {
+        padding-left: 22px;
+        margin: 8px 0;
+      }
+      li {
+        margin: 6px 0;
+      }
+
+      code {
+        background: rgba(110, 118, 129, 0.2);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-family: "SF Mono", Menlo, Consolas, monospace;
+        font-size: 13px;
+        color: #f0883e;
+      }
+
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 12px 0;
+        font-size: 13px;
+      }
+      th,
+      td {
+        border: 1px solid var(--border);
+        padding: 9px 11px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        background: var(--panel-2);
+        color: var(--accent);
+        font-weight: 600;
+      }
+      tr:nth-child(even) td {
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      .pill {
+        display: inline-block;
+        padding: 2px 9px;
+        border-radius: 11px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.4px;
+        white-space: nowrap;
+      }
+      .pill.have {
+        background: rgba(86, 211, 100, 0.18);
+        color: var(--ok);
+        border: 1px solid rgba(86, 211, 100, 0.4);
+      }
+      .pill.new {
+        background: rgba(240, 136, 62, 0.18);
+        color: var(--warn);
+        border: 1px solid rgba(240, 136, 62, 0.4);
+      }
+      .pill.check {
+        background: rgba(88, 166, 255, 0.18);
+        color: var(--accent);
+        border: 1px solid rgba(88, 166, 255, 0.4);
+      }
+
+      .why {
+        color: var(--muted);
+        font-size: 12.5px;
+        font-style: italic;
+        display: block;
+        margin-top: 4px;
+      }
+
+      .callout {
+        background: rgba(88, 166, 255, 0.07);
+        border-left: 3px solid var(--accent);
+        padding: 12px 16px;
+        margin: 14px 0;
+        border-radius: 4px;
+      }
+      .legend {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin: 8px 0 4px;
+        font-size: 12.5px;
+        color: var(--muted);
+      }
+      .legend .pill {
+        margin-right: 6px;
+      }
+
+      @media (max-width: 1000px) {
+        header {
+          padding: 20px;
+        }
+        main {
+          padding: 16px;
+        }
+        .row {
+          grid-template-columns: 1fr;
+        }
+        .col.en {
+          border-right: none;
+          border-bottom: 1px solid var(--border);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>BWG MT5 AI Risk Control Agent — Kickoff Note for Alex</h1>
+      <h2>BWG MT5 AI 风控代理 — 与 Alex 的开工沟通</h2>
+      <div class="meta">
+        <span><strong>Date / 日期:</strong> 04-05-2026</span>
+        <span><strong>From / 来自:</strong> Rabi</span>
+        <span><strong>To / 致:</strong> Alex (Backend / 后端)</span>
+        <span><strong>Version / 版本:</strong> v9 — kickoff / 首次沟通</span>
+      </div>
+    </header>
+
+    <main>
+      <!-- ============ INTRO ============ -->
+      <section class="bilingual">
+        <h2>Hi Alex / Alex 你好</h2>
+        <div class="row">
+          <div class="col en">
+            <h3>English</h3>
+            <p>
+              I'm starting the AI risk-control agent for MT5. Before I write a
+              line of code, I want to align with you on the small set of APIs I
+              will depend on. This note explains
+              <strong>what the LLM does (and what it does not do)</strong>,
+              <strong>what data I need from you</strong>, and
+              <strong
+                >what actions I need to call back into your platform</strong
+              >.
+            </p>
+            <p>
+              I've marked each item with one of three tags so you can scan
+              quickly:
+            </p>
+            <div class="legend">
+              <span
+                ><span class="pill have">AVAILABLE</span> I believe this already
+                exists in your platform / MT5 Manager API</span
+              >
+              <span
+                ><span class="pill new">NEW</span> I think this needs to be
+                built</span
+              >
+              <span
+                ><span class="pill check">CONFIRM</span> I'm not sure — please
+                tell me</span
+              >
+            </div>
+            <p>
+              If I labelled anything wrong, just correct me. Nothing here is
+              final.
+            </p>
+          </div>
+          <div class="col zh">
+            <h3>中文</h3>
+            <p>
+              我准备开始做 MT5 的 AI
+              风控代理。在动手写代码前,想先和你对齐我会依赖的那一小组
+              API。这份文档说明三件事:<strong>大模型做什么(以及不做什么)</strong>、<strong>我需要从你这边读取哪些数据</strong>、<strong>我需要回调哪些动作到你的平台</strong>。
+            </p>
+            <p>每一项我都打了三种标签之一,方便你快速扫读:</p>
+            <div class="legend">
+              <span
+                ><span class="pill have">已有</span> 我认为你的平台 / MT5
+                Manager API 已经具备</span
+              >
+              <span><span class="pill new">新建</span> 我认为需要新开发</span>
+              <span
+                ><span class="pill check">待确认</span>
+                我不确定,请你告诉我</span
+              >
+            </div>
+            <p>如果我打错了标签,直接纠正我即可。这里的内容都不是最终版本。</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 1. SCOPE OF LLM ============ -->
+      <section class="bilingual">
+        <h2>
+          1. The scope of the LLM (so you know what I'm building) /
+          大模型的边界(让你了解我在做什么)
+        </h2>
+        <div class="row">
+          <div class="col en">
+            <h3>English</h3>
+            <p><strong>What the LLM does:</strong></p>
+            <ul>
+              <li>
+                Reads a JSON bundle of one trader's recent activity (no personal
+                info).
+              </li>
+              <li>
+                Decides if the data shows one of
+                <strong>four risk patterns</strong>: Latency Arbitrage, Scalping
+                Violation, Swap Arbitrage, Bonus / Credit Abuse.
+              </li>
+              <li>
+                Writes a short analysis with the specific data points it relied
+                on.
+              </li>
+              <li>Drafts a 6-line Telegram message and a customer email.</li>
+            </ul>
+            <p><strong>What the LLM never does:</strong></p>
+            <ul>
+              <li>It never sees personal data (name, email, phone, raw IP).</li>
+              <li>
+                It never executes anything. A human officer taps a button in
+                Telegram, then my service calls your API.
+              </li>
+            </ul>
+            <p>
+              That's the whole agent. Everything below is what I need from your
+              side to make it possible.
+            </p>
+          </div>
+          <div class="col zh">
+            <h3>中文</h3>
+            <p><strong>大模型做的事:</strong></p>
+            <ul>
+              <li>读取某位交易者近期活动的 JSON 数据包(不含任何个人信息)。</li>
+              <li>
+                判断数据是否符合<strong>四种风险模式</strong>之一:延迟套利、剥头皮违规、隔夜利息套利、赠金/信用滥用。
+              </li>
+              <li>写一段简短分析,标注它依赖的具体数据点。</li>
+              <li>起草一条 6 行的电报消息和一封发给客户的邮件。</li>
+            </ul>
+            <p><strong>大模型绝不做的事:</strong></p>
+            <ul>
+              <li>不接触任何个人信息(姓名、邮箱、电话、明文 IP)。</li>
+              <li>
+                不执行任何动作。必须由风控官员在电报里点按钮,我的服务再去调用你的
+                API。
+              </li>
+            </ul>
+            <p>
+              这就是这个代理的全部。下面列出的内容,都是我为了实现它需要你支持的部分。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 2. DATA I NEED ============ -->
+      <section class="bilingual">
+        <h2>
+          2. Data I need to READ from your side / 我需要从你这边读取的数据
+        </h2>
+        <div class="row">
+          <div class="col en">
+            <h3>English</h3>
+            <p>
+              Per uid, on a schedule or when an event fires, I'll pull a bundle.
+              For each item I explain why I need it.
+            </p>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Status</th>
+                  <th>Why I need it</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <code>account</code> — login_id, uid, group, leverage,
+                    balance, equity, credit, currency, kyc_level
+                  </td>
+                  <td><span class="pill have">AVAILABLE</span></td>
+                  <td>
+                    Baseline context for every case. Group tells me the min-hold
+                    rule for Scalping (R2).
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>deals</code> — deal_id, symbol, volume, side,
+                    open/close time, prices, profit, swap
+                  </td>
+                  <td><span class="pill have">AVAILABLE</span></td>
+                  <td>The core evidence for all four risks.</td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>orders</code> — order_id, request_time,
+                    execution_time, request_price, fill_price
+                  </td>
+                  <td><span class="pill check">CONFIRM</span></td>
+                  <td>
+                    I need the gap between request and execution to detect
+                    Latency Arbitrage (R1). MT5 stores it; I need to know if
+                    your API exposes both timestamps.
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>open_positions</code> — symbol, side, volume,
+                    open_time, current_pnl, swap_accrued
+                  </td>
+                  <td><span class="pill have">AVAILABLE</span></td>
+                  <td>
+                    Needed to spot offsetting positions across linked accounts
+                    (Swap Arbitrage R3).
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>withdrawals</code> — id, amount, currency, state,
+                    submitted_at
+                  </td>
+                  <td><span class="pill check">CONFIRM</span></td>
+                  <td>
+                    Bonus/Credit Abuse (R4) hinges on withdrawals right after a
+                    bonus. Withdrawals usually live in your CRM/back-office, not
+                    MT5.
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>deposits</code> — id, amount, currency, state, time
+                  </td>
+                  <td><span class="pill check">CONFIRM</span></td>
+                  <td>
+                    Same reason as withdrawals — used to compute
+                    deposit-to-bonus ratio for R4.
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>bonuses</code> — id, type, amount, granted_at, terms
+                    (required_turnover, expiry_at)
+                  </td>
+                  <td><span class="pill new">NEW</span></td>
+                  <td>
+                    I need the bonus terms (required turnover, expiry) to detect
+                    churn-trading. I assume nothing exposes this today.
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>logins</code> — uid, ip_hash, device_fp_hash,
+                    country_code, ts
+                  </td>
+                  <td><span class="pill new">NEW</span></td>
+                  <td>
+                    Used to detect linked accounts (R3, R4). Critical: I need
+                    the IP and device fingerprint
+                    <strong>hashed before they reach me</strong>, never raw.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>quote_ticks</code> — symbol, ts (ms), bid, ask</td>
+                  <td><span class="pill check">CONFIRM</span></td>
+                  <td>
+                    Latency Arbitrage (R1) needs millisecond ticks to compare
+                    against order timing. Tick storage is heavy — please tell me
+                    the resolution and retention you can give me.
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>news_window</code> — symbol, ts, scheduled events
+                    (name, time, severity)
+                  </td>
+                  <td><span class="pill new">NEW</span></td>
+                  <td>
+                    Latency arbitrage spikes around news. Helpful to suppress
+                    false positives. Lowest priority — can come in v2 if you
+                    don't have it.
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>crm_profile</code> (no PII) — uid, segment, language,
+                    country_code, kyc_level, prior_warnings_count,
+                    linked_uids_count
+                  </td>
+                  <td><span class="pill new">NEW</span></td>
+                  <td>
+                    Gives the LLM context (e.g. "language=zh" so the email is in
+                    Chinese). Strictly no PII — only categorical + counts.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="callout">
+              <strong>One transport question:</strong> for the five event
+              triggers (new withdrawal submitted, abnormal short-term profit,
+              high-frequency trading, news event window, suspicious bonus usage)
+              — can you push them to me as <strong>webhooks</strong>? If not,
+              I'll poll. Webhook is simpler and cheaper; I just need an HMAC
+              secret.
+            </div>
+          </div>
+
+          <div class="col zh">
+            <h3>中文</h3>
+            <p>
+              按
+              uid,定时或事件触发时,我会拉取一组数据。每一项我都说明为什么需要。
+            </p>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>数据</th>
+                  <th>状态</th>
+                  <th>为什么需要</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <code>account</code> 账户 —
+                    登录号、uid、组别、杠杆、余额、净值、信用、币种、KYC 级别
+                  </td>
+                  <td><span class="pill have">已有</span></td>
+                  <td>
+                    每个案件的基础上下文。组别告诉我剥头皮(R2)的最小持仓规则。
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>deals</code> 成交 —
+                    成交ID、品种、手数、方向、开/平仓时间、价格、盈亏、隔夜利息
+                  </td>
+                  <td><span class="pill have">已有</span></td>
+                  <td>四类风险的核心证据。</td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>orders</code> 订单 —
+                    订单ID、请求时间、执行时间、请求价、成交价
+                  </td>
+                  <td><span class="pill check">待确认</span></td>
+                  <td>
+                    检测延迟套利(R1)需要请求与执行的时间差。MT5
+                    内部存了这个,但需要确认你的 API 是否同时暴露这两个时间戳。
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>open_positions</code> 持仓 —
+                    品种、方向、手数、开仓时间、当前盈亏、累计隔夜利息
+                  </td>
+                  <td><span class="pill have">已有</span></td>
+                  <td>用于识别关联账户之间的对冲仓位(隔夜利息套利 R3)。</td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>withdrawals</code> 出金 —
+                    ID、金额、币种、状态、提交时间
+                  </td>
+                  <td><span class="pill check">待确认</span></td>
+                  <td>
+                    赠金/信用滥用(R4)的核心是赠金后立即提现。出金一般在
+                    CRM/后台系统,不在 MT5 里。
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>deposits</code> 入金 — ID、金额、币种、状态、时间
+                  </td>
+                  <td><span class="pill check">待确认</span></td>
+                  <td>同上 —— 用于计算 R4 的入金/赠金比例。</td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>bonuses</code> 赠金 —
+                    ID、类型、金额、发放时间、条款(所需流水、到期时间)
+                  </td>
+                  <td><span class="pill new">新建</span></td>
+                  <td>
+                    需要赠金条款(流水要求、到期时间)来识别刷单。我假设目前没有接口暴露这个。
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>logins</code> 登录 — uid、IP
+                    哈希、设备指纹哈希、国家码、时间戳
+                  </td>
+                  <td><span class="pill new">新建</span></td>
+                  <td>
+                    用于识别关联账户(R3、R4)。关键:IP
+                    和设备指纹必须<strong>在送到我这里之前就哈希好</strong>,绝不能是明文。
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>quote_ticks</code> 行情tick —
+                    品种、时间戳(毫秒)、买价、卖价
+                  </td>
+                  <td><span class="pill check">待确认</span></td>
+                  <td>
+                    延迟套利(R1)需要毫秒级 tick 来与订单时间对比。Tick
+                    存储成本很高,请告诉我你能给到的精度和保留期。
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>news_window</code> 新闻窗口 —
+                    品种、时间、计划中的事件(名称、时间、严重度)
+                  </td>
+                  <td><span class="pill new">新建</span></td>
+                  <td>
+                    延迟套利常在新闻前后激增。这个能帮我减少误报。优先级最低,如果你没有可以放到
+                    v2。
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>crm_profile</code> CRM 画像(无 PII) —
+                    uid、分群、语言、国家码、KYC 级别、历史警告数、关联 uid 数
+                  </td>
+                  <td><span class="pill new">新建</span></td>
+                  <td>
+                    给大模型提供上下文(比如 "language=zh"
+                    让邮件用中文)。严格不含 PII,只有分类字段和计数。
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="callout">
+              <strong>关于传输方式的一个问题:</strong>
+              五种事件触发(新出金提交、异常短期盈利、高频交易、新闻事件窗口、可疑赠金使用)能否通过
+              <strong>Webhook</strong> 推送给我?如果不行我就轮询。Webhook
+              更简单也更省成本,只需要给我一个 HMAC 密钥。
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 3. ACTIONS I NEED ============ -->
+      <section class="bilingual">
+        <h2>
+          3. Actions I need to CALL into your side / 我需要回调到你这边的动作
+        </h2>
+        <div class="row">
+          <div class="col en">
+            <h3>English</h3>
+            <p>
+              When the human officer taps a button in Telegram, my service calls
+              one of these. I'll always pass an idempotency key so retries are
+              safe.
+            </p>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th>Status</th>
+                  <th>Why I need it</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <code
+                      >pause_withdrawal(withdrawal_id, reason, case_id,
+                      idem_key)</code
+                    >
+                  </td>
+                  <td><span class="pill check">CONFIRM</span></td>
+                  <td>Most common action for R4. Must be reversible.</td>
+                </tr>
+                <tr>
+                  <td>
+                    <code
+                      >restrict_open_new_position(login_id, reason, case_id,
+                      idem_key)</code
+                    >
+                  </td>
+                  <td><span class="pill have">AVAILABLE</span></td>
+                  <td>
+                    MT5 read-only flag on the trading account. Used for R1, R2.
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <code
+                      >suspend_trading(login_id, reason, case_id,
+                      idem_key)</code
+                    >
+                  </td>
+                  <td><span class="pill have">AVAILABLE</span></td>
+                  <td>
+                    Disable / lock the account. Used for severe cases. I'll add
+                    a 2-step confirm in Telegram before calling.
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <code
+                      >send_email(uid, subject, body, case_id, idem_key)</code
+                    >
+                  </td>
+                  <td><span class="pill new">NEW</span></td>
+                  <td>
+                    Critical PII rule: I send only
+                    <strong>uid + subject + body</strong>. Your backend resolves
+                    uid → email address. My service must never see the address.
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>assign_cs_followup(case_id, cs_user, due_at)</code>
+                  </td>
+                  <td><span class="pill new">NEW</span></td>
+                  <td>
+                    So a customer-service agent picks up the case in their
+                    queue. Could be a row in your CRM.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>update_case_state(case_id, state, note)</code></td>
+                  <td><span class="pill new">NEW</span></td>
+                  <td>
+                    For Watch Only / Ignore / Escalate buttons. State only — no
+                    platform side-effect. Could live entirely in my service if
+                    you'd prefer.
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <code
+                      >adjust_profit(deal_id, delta, reason, case_id,
+                      idem_key)</code
+                    >
+                  </td>
+                  <td><span class="pill check">CONFIRM</span></td>
+                  <td>
+                    For profit clawback on confirmed abuse. If this is manual
+                    back-office today, I'll just file a request instead of
+                    calling — please tell me which.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="callout">
+              <strong>Two cross-cutting requests:</strong>
+              <ol>
+                <li>
+                  <strong>Idempotency keys</strong> on every write. If my
+                  service retries because of a network blip, I don't want to
+                  pause the same withdrawal twice.
+                </li>
+                <li>
+                  <strong>One auth method</strong> for both read and write —
+                  whatever you prefer (API key, mTLS, short-lived token). Tell
+                  me what fits your stack.
+                </li>
+              </ol>
+            </div>
+          </div>
+
+          <div class="col zh">
+            <h3>中文</h3>
+            <p>
+              当风控官员在电报里点按钮时,我的服务会调用下面这些接口。我会始终带幂等键,这样重试是安全的。
+            </p>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>动作</th>
+                  <th>状态</th>
+                  <th>为什么需要</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <code
+                      >pause_withdrawal(withdrawal_id, reason, case_id,
+                      idem_key)</code
+                    >
+                  </td>
+                  <td><span class="pill check">待确认</span></td>
+                  <td>R4 最常见的动作。必须可撤销。</td>
+                </tr>
+                <tr>
+                  <td>
+                    <code
+                      >restrict_open_new_position(login_id, reason, case_id,
+                      idem_key)</code
+                    >
+                  </td>
+                  <td><span class="pill have">已有</span></td>
+                  <td>MT5 账户的只读标记。用于 R1、R2。</td>
+                </tr>
+                <tr>
+                  <td>
+                    <code
+                      >suspend_trading(login_id, reason, case_id,
+                      idem_key)</code
+                    >
+                  </td>
+                  <td><span class="pill have">已有</span></td>
+                  <td>
+                    停用 /
+                    锁定账户。用于严重案件。调用前我会在电报里加一步二次确认。
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <code
+                      >send_email(uid, subject, body, case_id, idem_key)</code
+                    >
+                  </td>
+                  <td><span class="pill new">新建</span></td>
+                  <td>
+                    关键 PII 规则:我只传
+                    <strong>uid + 主题 + 正文</strong>。你的后端把 uid
+                    解析成邮箱地址。我的服务绝不接触邮箱地址。
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>assign_cs_followup(case_id, cs_user, due_at)</code>
+                  </td>
+                  <td><span class="pill new">新建</span></td>
+                  <td>把案件转给客服跟进。可以就是你 CRM 里的一行记录。</td>
+                </tr>
+                <tr>
+                  <td><code>update_case_state(case_id, state, note)</code></td>
+                  <td><span class="pill new">新建</span></td>
+                  <td>
+                    用于"仅观察 / 忽略 /
+                    上报"按钮。只更新状态,不影响平台。如果你愿意,完全放在我的服务里也行。
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <code
+                      >adjust_profit(deal_id, delta, reason, case_id,
+                      idem_key)</code
+                    >
+                  </td>
+                  <td><span class="pill check">待确认</span></td>
+                  <td>
+                    确认滥用后追回利润。如果目前是后台手工操作,我就改成提交一个工单而不是直接调用
+                    —— 请告诉我哪种。
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="callout">
+              <strong>两个通用请求:</strong>
+              <ol>
+                <li>
+                  所有写入接口都加<strong>幂等键</strong>。我的服务因为网络抖动重试时,不应该把同一笔出金暂停两次。
+                </li>
+                <li>
+                  读写共用<strong>同一种鉴权方式</strong> —— 你方便就行(API
+                  Key、mTLS、短期 Token)。告诉我哪种最契合你的技术栈。
+                </li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 4. WHAT I'LL DO ON MY SIDE ============ -->
+      <section class="bilingual">
+        <h2>4. What I'll do on my side / 我这边会做的事</h2>
+        <div class="row">
+          <div class="col en">
+            <h3>English</h3>
+            <ul>
+              <li>
+                Build the LLM prompts, the analysis pipeline, the Telegram bot,
+                and the human-approval workflow.
+              </li>
+              <li>
+                Keep all PII out of the LLM. The whitelist of fields the LLM
+                sees is fixed in code and audited.
+              </li>
+              <li>
+                Write idempotent callers for every action above, with retry,
+                audit log, and per-officer rate limits.
+              </li>
+              <li>
+                Stand up a mock of every endpoint we list here so I can develop
+                and test without blocking on you.
+              </li>
+            </ul>
+          </div>
+          <div class="col zh">
+            <h3>中文</h3>
+            <ul>
+              <li>开发大模型提示词、分析流水线、电报机器人和人工审批流程。</li>
+              <li>
+                不让任何 PII
+                进入大模型。大模型能看到的字段在代码里写死并接受审计。
+              </li>
+              <li>
+                对上面每一个动作都做幂等调用,带重试、审计日志、按官员的限频。
+              </li>
+              <li>
+                为这里列出的所有接口写
+                Mock,这样我可以独立开发和测试,不会卡住等你。
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 5. WHAT I'D LIKE FROM YOU ============ -->
+      <section class="bilingual">
+        <h2>
+          5. What I'd like back from you (no rush) /
+          希望从你这里得到的反馈(不急)
+        </h2>
+        <div class="row">
+          <div class="col en">
+            <h3>English</h3>
+            <ol>
+              <li>
+                Correct my <span class="pill have">AVAILABLE</span> /
+                <span class="pill new">NEW</span> /
+                <span class="pill check">CONFIRM</span> tags above wherever I
+                got them wrong.
+              </li>
+              <li>
+                For each <span class="pill check">CONFIRM</span> item, just a
+                yes/no on whether it exists today.
+              </li>
+              <li>
+                For the <span class="pill new">NEW</span> items, your gut feel
+                on effort — small / medium / big — so I can sequence my mock
+                work around your build order.
+              </li>
+            </ol>
+            <p>
+              That's it for now. Once I hear back I'll send a tighter spec for
+              each <span class="pill new">NEW</span> endpoint (request,
+              response, error cases). Happy to jump on a call if easier.
+            </p>
+            <p>— Rabi</p>
+          </div>
+          <div class="col zh">
+            <h3>中文</h3>
+            <ol>
+              <li>
+                上面我打的 <span class="pill have">已有</span> /
+                <span class="pill new">新建</span> /
+                <span class="pill check">待确认</span>
+                标签如果有错,请直接纠正我。
+              </li>
+              <li>
+                每个
+                <span class="pill check">待确认</span> 项目,只需告诉我"目前有 /
+                没有"。
+              </li>
+              <li>
+                每个
+                <span class="pill new">新建</span> 项目,凭直觉给我个工作量预估
+                —— 小 / 中 / 大,这样我可以按你开发的顺序安排我的 Mock 工作。
+              </li>
+            </ol>
+            <p>
+              暂时就这些。收到你的反馈后,我会针对每个
+              <span class="pill new">新建</span>
+              接口发一份更具体的规范(请求、响应、异常)。如果电话沟通更方便,随时可以约。
+            </p>
+            <p>—— Rabi</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

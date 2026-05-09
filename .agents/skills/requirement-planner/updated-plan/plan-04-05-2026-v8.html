@@ -1,0 +1,1434 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>BWG MT5 AI Risk Control Agent — Plan v8 / 计划 v8</title>
+    <style>
+      :root {
+        --bg: #0f1419;
+        --panel: #1a2028;
+        --panel-2: #232b36;
+        --text: #e6edf3;
+        --muted: #8b949e;
+        --accent: #58a6ff;
+        --accent-2: #79c0ff;
+        --warn: #f0883e;
+        --danger: #ff7b72;
+        --ok: #56d364;
+        --border: #30363d;
+        --code-bg: #0d1117;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.65;
+        font-size: 15px;
+      }
+      header {
+        background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+        border-bottom: 1px solid var(--border);
+        padding: 32px 48px;
+      }
+      header h1 {
+        margin: 0 0 8px 0;
+        font-size: 28px;
+        color: var(--accent-2);
+      }
+      header .meta {
+        color: var(--muted);
+        font-size: 14px;
+      }
+      header .meta span {
+        margin-right: 16px;
+      }
+      main {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 24px 48px 80px;
+      }
+      .toc {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 16px 24px;
+        margin-bottom: 32px;
+      }
+      .toc h3 {
+        margin: 0 0 12px 0;
+        color: var(--accent);
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+      .toc ol {
+        margin: 0;
+        padding-left: 20px;
+        columns: 2;
+        column-gap: 32px;
+      }
+      .toc li {
+        margin: 4px 0;
+      }
+      .toc a {
+        color: var(--text);
+        text-decoration: none;
+      }
+      .toc a:hover {
+        color: var(--accent-2);
+        text-decoration: underline;
+      }
+
+      section.bilingual {
+        margin: 28px 0;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        background: var(--panel);
+      }
+      section.bilingual > h2 {
+        margin: 0;
+        padding: 16px 24px;
+        background: var(--panel-2);
+        color: var(--accent-2);
+        font-size: 18px;
+        border-bottom: 1px solid var(--border);
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0;
+      }
+      .col {
+        padding: 20px 24px;
+        min-width: 0;
+      }
+      .col.en {
+        border-right: 1px solid var(--border);
+      }
+      .col h3 {
+        margin: 0 0 8px 0;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        color: var(--muted);
+      }
+      .col.en h3 {
+        color: #79c0ff;
+      }
+      .col.zh h3 {
+        color: #f0883e;
+      }
+
+      h4 {
+        margin: 16px 0 8px 0;
+        color: var(--accent);
+        font-size: 15px;
+      }
+      p {
+        margin: 8px 0;
+      }
+      ul,
+      ol {
+        padding-left: 22px;
+        margin: 8px 0;
+      }
+      li {
+        margin: 4px 0;
+      }
+      strong {
+        color: var(--accent-2);
+      }
+      .col.zh strong {
+        color: var(--warn);
+      }
+
+      pre {
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 14px 16px;
+        overflow-x: auto;
+        font-size: 12.5px;
+        font-family: "SF Mono", Menlo, Consolas, monospace;
+        line-height: 1.5;
+        color: #c9d1d9;
+      }
+      code {
+        background: rgba(110, 118, 129, 0.2);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-family: "SF Mono", Menlo, Consolas, monospace;
+        font-size: 13px;
+        color: #f0883e;
+      }
+      pre code {
+        background: none;
+        padding: 0;
+        color: inherit;
+        font-size: inherit;
+      }
+
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 12px 0;
+        font-size: 13px;
+      }
+      th,
+      td {
+        border: 1px solid var(--border);
+        padding: 8px 10px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        background: var(--panel-2);
+        color: var(--accent);
+        font-weight: 600;
+      }
+      tr:nth-child(even) td {
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      .risk-card {
+        background: var(--panel-2);
+        border-left: 3px solid var(--warn);
+        padding: 12px 16px;
+        margin: 10px 0;
+        border-radius: 4px;
+      }
+      .risk-card .name {
+        color: var(--warn);
+        font-weight: 700;
+        font-size: 14px;
+      }
+      .example {
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 13.5px;
+      }
+
+      .tag {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-size: 11px;
+        font-weight: 600;
+        margin-right: 4px;
+      }
+      .tag.high {
+        background: rgba(255, 123, 114, 0.2);
+        color: var(--danger);
+      }
+      .tag.med {
+        background: rgba(240, 136, 62, 0.2);
+        color: var(--warn);
+      }
+      .tag.low {
+        background: rgba(86, 211, 100, 0.2);
+        color: var(--ok);
+      }
+
+      .telegram {
+        background: #17212b;
+        border: 1px solid #2b5278;
+        border-radius: 10px;
+        padding: 14px 18px;
+        margin: 12px 0;
+        color: #e6edf3;
+        font-family:
+          "SF Pro Text",
+          -apple-system,
+          sans-serif;
+        font-size: 13.5px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      }
+      .telegram .line {
+        padding: 2px 0;
+      }
+      .telegram .buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 12px;
+        border-top: 1px solid #2b5278;
+        padding-top: 10px;
+      }
+      .telegram .btn {
+        background: #2b5278;
+        color: #fff;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        cursor: default;
+      }
+
+      .flow {
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 16px;
+        font-family: "SF Mono", Menlo, monospace;
+        font-size: 12.5px;
+        white-space: pre;
+        line-height: 1.5;
+        color: #c9d1d9;
+        overflow-x: auto;
+      }
+
+      .question {
+        background: rgba(88, 166, 255, 0.08);
+        border-left: 3px solid var(--accent);
+        padding: 10px 14px;
+        margin: 8px 0;
+        border-radius: 4px;
+      }
+      .question .num {
+        color: var(--accent);
+        font-weight: 700;
+        margin-right: 6px;
+      }
+
+      @media (max-width: 1000px) {
+        header {
+          padding: 20px;
+        }
+        main {
+          padding: 16px;
+        }
+        .row {
+          grid-template-columns: 1fr;
+        }
+        .col.en {
+          border-right: none;
+          border-bottom: 1px solid var(--border);
+        }
+        .toc ol {
+          columns: 1;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>BestWing Global · MT5 AI Risk Control Agent · MVP Plan v8</h1>
+      <h1 style="font-size: 22px; color: var(--warn); margin-top: 0">
+        必赢环球 · MT5 AI 风控代理 · MVP 计划 v8
+      </h1>
+      <div class="meta">
+        <span><strong>Date / 日期:</strong> 04-05-2026</span>
+        <span><strong>Author / 作者:</strong> Rabi</span>
+        <span
+          ><strong>Audience / 阅读对象:</strong> Alex (Backend Dev /
+          后端开发)</span
+        >
+        <span><strong>Status / 状态:</strong> Draft v8</span>
+      </div>
+    </header>
+
+    <main>
+      <div class="toc">
+        <h3>Table of Contents / 目录</h3>
+        <ol>
+          <li><a href="#s1">The Problem / 问题</a></li>
+          <li><a href="#s2">The Four Risks / 四类风险</a></li>
+          <li><a href="#s3">Input Data / 输入数据</a></li>
+          <li><a href="#s4">LLM Prompt / 大模型提示词</a></li>
+          <li><a href="#s5">LLM Response / 大模型响应</a></li>
+          <li><a href="#s6">Telegram Message / 电报消息</a></li>
+          <li><a href="#s7">Actions / 操作动作</a></li>
+          <li><a href="#s8">Whole Flow / 完整流程</a></li>
+          <li><a href="#s9">Questions for Alex / 给 Alex 的问题</a></li>
+          <li><a href="#s10">Next Moves / 下一步</a></li>
+        </ol>
+      </div>
+
+      <!-- ============ HOW TO READ ============ -->
+      <section class="bilingual">
+        <h2>How to read this / 如何阅读此文档</h2>
+        <div class="row">
+          <div class="col en">
+            <h3>English</h3>
+            <p>
+              I went too wide in v7. v8 is intentionally narrow. Only what Alex
+              needs to act on. The flow has five steps and that is the whole
+              document:
+            </p>
+            <p>
+              <strong
+                >Input data → LLM prompt → LLM output → Telegram message →
+                Actions executed via your API</strong
+              >
+            </p>
+          </div>
+          <div class="col zh">
+            <h3>中文</h3>
+            <p>
+              v7 写得太宽泛了。v8 有意收窄,只保留 Alex
+              需要采取行动的内容。整个流程只有五步,这就是全部:
+            </p>
+            <p>
+              <strong
+                >输入数据 → 大模型提示词 → 大模型输出 → 电报消息 → 通过你的 API
+                执行操作</strong
+              >
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 1. PROBLEM ============ -->
+      <section class="bilingual" id="s1">
+        <h2>1. The Problem / 问题</h2>
+        <div class="row">
+          <div class="col en">
+            <h3>English</h3>
+            <p>
+              BWG runs MT5. Some traders abuse the platform in four specific
+              ways. Today, detection is manual and slow. We want an AI assistant
+              that watches every account, recognises the four abuse patterns
+              from real trading data, and pushes a single short Telegram message
+              to a human officer with action buttons. The human approves; we
+              call your APIs to execute.
+              <strong>Nothing happens automatically.</strong>
+            </p>
+          </div>
+          <div class="col zh">
+            <h3>中文</h3>
+            <p>
+              BWG 运营 MT5
+              平台。部分交易者会以四种特定方式滥用平台。目前的检测靠人工,既慢又难发现。我们想做一个
+              AI
+              助手,持续监控每个账户,从真实交易数据中识别这四种滥用模式,并向风控官员推送一条简短的电报消息,附带操作按钮。由人工审批,然后调用你的
+              API 执行。<strong>系统不会自动执行任何动作。</strong>
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 2. FOUR RISKS ============ -->
+      <section class="bilingual" id="s2">
+        <h2>2. The Four Risks / 四类风险</h2>
+        <div class="row">
+          <div class="col en">
+            <h3>English</h3>
+
+            <div class="risk-card">
+              <div class="name">R1 — Latency Arbitrage</div>
+              <div>
+                Trader exploits a faster external price feed. Opens a position
+                with us before our price catches up, closes seconds later for
+                near risk-free profit.
+              </div>
+              <div class="example">
+                <strong>Example:</strong> EURUSD ticks 1.07320 → 1.07338 on a
+                fast feed at 10:21:00.100. Trader buys 1 lot with us at
+                10:21:00.250 at 1.07321. Closes 14s later at 1.07338 = +$17.
+                Repeats 200 times in a day with 91% win rate.
+              </div>
+            </div>
+
+            <div class="risk-card">
+              <div class="name">R2 — Scalping Violation</div>
+              <div>
+                Trader breaks the broker's minimum holding-time rule (per MT5
+                group, e.g. 60s).
+              </div>
+              <div class="example">
+                <strong>Example:</strong> Account in group
+                <code>Pro-Raw-USD</code> (min hold = 60s). 62 of 80 daily trades
+                close in under 30s, totaling +$1,840.
+              </div>
+            </div>
+
+            <div class="risk-card">
+              <div class="name">R3 — Swap Arbitrage</div>
+              <div>
+                Trader holds offsetting positions across linked accounts so net
+                market exposure is ~0 but they collect positive overnight swap.
+              </div>
+              <div class="example">
+                <strong>Example:</strong> Account A long 5 lots AUDJPY, Account
+                B (same KYC, same IP) short 5 lots AUDJPY. Held across the
+                swap-credit cutoff every night for 30 nights. Profit comes
+                entirely from swap.
+              </div>
+            </div>
+
+            <div class="risk-card">
+              <div class="name">R4 — Bonus / Credit Abuse</div>
+              <div>
+                Trader misuses a bonus: churn-trading to fake turnover,
+                withdrawing right after the bonus, or running a multi-account
+                ring to claim the same bonus repeatedly.
+              </div>
+              <div class="example">
+                <strong>Example:</strong> Customer deposits $10, claims $500
+                bonus, runs 200 round-trip trades with cumulative P&L of −$3
+                over 6 hours, then files a $480 withdrawal.
+              </div>
+            </div>
+          </div>
+
+          <div class="col zh">
+            <h3>中文</h3>
+
+            <div class="risk-card">
+              <div class="name">R1 — 延迟套利 (Latency Arbitrage)</div>
+              <div>
+                交易者利用更快的外部行情源。先于我方报价更新前在我们这里开仓,几秒后平仓,获取近乎无风险的利润。
+              </div>
+              <div class="example">
+                <strong>示例:</strong> 10:21:00.100,外部快速行情 EURUSD 从
+                1.07320 跳到 1.07338。交易者在 10:21:00.250 以 1.07321
+                在我们这里买入 1 手,14 秒后以 1.07338 平仓,获利 17
+                美元。一天重复 200 次,胜率 91%。
+              </div>
+            </div>
+
+            <div class="risk-card">
+              <div class="name">R2 — 剥头皮违规 (Scalping Violation)</div>
+              <div>
+                交易者违反经纪商的最小持仓时间规则(按 MT5 组别设定,如 60 秒)。
+              </div>
+              <div class="example">
+                <strong>示例:</strong> 账户在
+                <code>Pro-Raw-USD</code> 组(最小持仓 60 秒)。当日 80 笔交易中,62
+                笔在 30 秒内平仓,合计盈利 1,840 美元。
+              </div>
+            </div>
+
+            <div class="risk-card">
+              <div class="name">R3 — 隔夜利息套利 (Swap Arbitrage)</div>
+              <div>
+                交易者在多个关联账户之间持有对冲仓位,净市场敞口约为
+                0,但能赚取正向隔夜利息。
+              </div>
+              <div class="example">
+                <strong>示例:</strong> 账户 A 多头 5 手 AUDJPY,账户 B(同一
+                KYC、同一 IP)空头 5 手 AUDJPY。连续 30
+                晚跨过隔夜利息计息时点持仓。利润完全来自隔夜利息。
+              </div>
+            </div>
+
+            <div class="risk-card">
+              <div class="name">
+                R4 — 赠金 / 信用滥用 (Bonus / Credit Abuse)
+              </div>
+              <div>
+                交易者滥用赠金:刷单造假成交量、领取赠金后立即提现,或运营多账户团伙重复领取同一赠金。
+              </div>
+              <div class="example">
+                <strong>示例:</strong> 客户入金 10 美元,领取 500 美元赠金,6
+                小时内做 200 次往返交易,累计盈亏 -3 美元,随后申请 480 美元提现。
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 3. INPUT DATA ============ -->
+      <section class="bilingual" id="s3">
+        <h2>
+          3. Input Data (the data we need from you) /
+          输入数据(我们需要你提供的数据)
+        </h2>
+        <div class="row">
+          <div class="col en">
+            <h3>English</h3>
+            <p>
+              For each scan or event, we collect a per-uid bundle. Naming below
+              is <strong>assumed</strong> — please confirm or rename.
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>Bundle</th>
+                  <th>Contents</th>
+                  <th>Used by</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>account</code></td>
+                  <td>
+                    login_id, uid, group, leverage, balance, equity, credit,
+                    currency, kyc_level
+                  </td>
+                  <td>All</td>
+                </tr>
+                <tr>
+                  <td><code>deals</code></td>
+                  <td>
+                    deal_id, symbol, volume, side, open_time, close_time,
+                    prices, profit, swap
+                  </td>
+                  <td>R1–R4</td>
+                </tr>
+                <tr>
+                  <td><code>orders</code></td>
+                  <td>
+                    order_id, request_time, execution_time, request_price,
+                    fill_price
+                  </td>
+                  <td>R1</td>
+                </tr>
+                <tr>
+                  <td><code>open_positions</code></td>
+                  <td>
+                    symbol, side, volume, open_time, current_pnl, swap_accrued
+                  </td>
+                  <td>R3</td>
+                </tr>
+                <tr>
+                  <td><code>withdrawals</code></td>
+                  <td>id, amount, currency, state, submitted_at</td>
+                  <td>R4</td>
+                </tr>
+                <tr>
+                  <td><code>deposits</code></td>
+                  <td>id, amount, currency, state, time</td>
+                  <td>R4</td>
+                </tr>
+                <tr>
+                  <td><code>bonuses</code></td>
+                  <td>
+                    id, type, amount, granted_at, terms (required_turnover,
+                    expiry_at)
+                  </td>
+                  <td>R4</td>
+                </tr>
+                <tr>
+                  <td><code>logins</code></td>
+                  <td>uid, ip_hash, device_fp_hash, country_code, ts</td>
+                  <td>R3, R4</td>
+                </tr>
+                <tr>
+                  <td><code>quote_ticks</code></td>
+                  <td>symbol, ts (ms), bid, ask</td>
+                  <td>R1</td>
+                </tr>
+                <tr>
+                  <td><code>news_window</code></td>
+                  <td>symbol, ts, events (name, scheduled_at, severity)</td>
+                  <td>R1</td>
+                </tr>
+                <tr>
+                  <td><code>crm_profile</code> (no PII)</td>
+                  <td>
+                    uid, segment, language, country_code, kyc_level,
+                    prior_warnings_count, linked_uids_count
+                  </td>
+                  <td>All</td>
+                </tr>
+              </tbody>
+            </table>
+            <p><strong>Strict rules:</strong></p>
+            <ul>
+              <li>
+                <strong>No PII</strong> in any field. IPs and device
+                fingerprints arrive <strong>hashed</strong>. Names, emails,
+                phone numbers never returned.
+              </li>
+              <li>
+                Timestamps in ISO-8601 UTC. Tick timestamps in
+                <strong>millisecond precision</strong>.
+              </li>
+              <li>
+                Pagination via <code>next_cursor</code> on list endpoints.
+              </li>
+            </ul>
+          </div>
+
+          <div class="col zh">
+            <h3>中文</h3>
+            <p>
+              每次扫描或事件触发时,我们按 uid
+              拉取一组数据包。下面的命名是<strong>假设的</strong>,请确认或修改。
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>数据包</th>
+                  <th>包含字段</th>
+                  <th>用于风险</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>account</code> 账户</td>
+                  <td>
+                    登录号、uid、组别、杠杆、余额、净值、信用、币种、KYC 级别
+                  </td>
+                  <td>全部</td>
+                </tr>
+                <tr>
+                  <td><code>deals</code> 成交</td>
+                  <td>
+                    成交ID、品种、手数、方向、开仓时间、平仓时间、价格、盈亏、隔夜利息
+                  </td>
+                  <td>R1–R4</td>
+                </tr>
+                <tr>
+                  <td><code>orders</code> 订单</td>
+                  <td>订单ID、请求时间、执行时间、请求价、成交价</td>
+                  <td>R1</td>
+                </tr>
+                <tr>
+                  <td><code>open_positions</code> 持仓</td>
+                  <td>品种、方向、手数、开仓时间、当前盈亏、累计隔夜利息</td>
+                  <td>R3</td>
+                </tr>
+                <tr>
+                  <td><code>withdrawals</code> 出金</td>
+                  <td>ID、金额、币种、状态、提交时间</td>
+                  <td>R4</td>
+                </tr>
+                <tr>
+                  <td><code>deposits</code> 入金</td>
+                  <td>ID、金额、币种、状态、时间</td>
+                  <td>R4</td>
+                </tr>
+                <tr>
+                  <td><code>bonuses</code> 赠金</td>
+                  <td>ID、类型、金额、发放时间、条款(所需流水、到期时间)</td>
+                  <td>R4</td>
+                </tr>
+                <tr>
+                  <td><code>logins</code> 登录</td>
+                  <td>uid、IP 哈希、设备指纹哈希、国家码、时间戳</td>
+                  <td>R3, R4</td>
+                </tr>
+                <tr>
+                  <td><code>quote_ticks</code> 行情tick</td>
+                  <td>品种、时间戳(毫秒)、买价、卖价</td>
+                  <td>R1</td>
+                </tr>
+                <tr>
+                  <td><code>news_window</code> 新闻窗口</td>
+                  <td>品种、时间、事件(名称、计划时间、严重度)</td>
+                  <td>R1</td>
+                </tr>
+                <tr>
+                  <td><code>crm_profile</code> CRM画像(无PII)</td>
+                  <td>
+                    uid、分群、语言、国家码、KYC 级别、历史警告次数、关联 uid 数
+                  </td>
+                  <td>全部</td>
+                </tr>
+              </tbody>
+            </table>
+            <p><strong>严格规则:</strong></p>
+            <ul>
+              <li>
+                任何字段都<strong>不能含个人身份信息(PII)</strong>。IP
+                和设备指纹必须<strong>哈希后</strong>下发。姓名、邮箱、电话绝不返回。
+              </li>
+              <li>
+                时间统一用 ISO-8601 UTC 格式。Tick
+                时间戳必须为<strong>毫秒精度</strong>。
+              </li>
+              <li>列表接口使用 <code>next_cursor</code> 分页。</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 4. LLM PROMPT ============ -->
+      <section class="bilingual" id="s4">
+        <h2>
+          4. LLM Prompt (one prompt, parameterised by risk) /
+          大模型提示词(单一模板,按风险参数化)
+        </h2>
+        <div class="row">
+          <div class="col en">
+            <h3>English</h3>
+            <p>
+              We send the LLM the per-uid bundle plus a short instruction. Same
+              prompt template for all four risks; only
+              <code>target_risk</code> and parameter focus differ.
+            </p>
+            <pre><code>You are a risk-control analyst for BestWing Global MT5.
+
+You will receive a JSON object with one trader's recent trading
+data (no personal information).
+
+Your job:
+1. Decide whether the data shows the pattern of {target_risk}.
+2. If yes, identify the specific data points (by id) that support it.
+3. Write a detailed analysis a human officer can verify.
+4. Write one short Telegram message (max 6 lines) summarising the case.
+5. Suggest a single primary action.
+
+Rules:
+- Use only the data provided. Do not invent numbers.
+- Refer to the customer only by `uid`. Never use any name, email, or address.
+- Output strictly the JSON schema in the response section. No prose outside JSON.
+
+Target risk: {target_risk}   (one of: latency_arbitrage, scalping_violation,
+                              swap_arbitrage, bonus_abuse)
+Window: {window}             (e.g. last_24h)
+UID: {uid}
+Data: { ...the bundle from §3... }</code></pre>
+          </div>
+
+          <div class="col zh">
+            <h3>中文</h3>
+            <p>
+              我们把按 uid
+              拉取的数据包和一段简短指令一起发给大模型。四类风险共用同一模板,只是
+              <code>target_risk</code> 和关注的参数不同。
+            </p>
+            <pre><code>你是必赢环球 MT5 的风控分析师。
+
+你会收到一个 JSON 对象,包含某位交易者最近的交易数据
+(不含任何个人身份信息)。
+
+你的任务:
+1. 判断数据是否呈现 {target_risk} 的模式。
+2. 如果是,指出支持判断的具体数据点(用 id 标注)。
+3. 写出一段详细分析,供风控官员复核。
+4. 写一条简短的电报消息(最多 6 行)总结案件。
+5. 建议一个主要操作动作。
+
+规则:
+- 只能使用提供的数据。不得编造数字。
+- 客户只用 `uid` 指代。绝不使用姓名、邮箱、地址。
+- 严格按照响应章节中的 JSON Schema 输出。JSON 之外不要写任何文字。
+
+目标风险: {target_risk}  (取值: latency_arbitrage, scalping_violation,
+                          swap_arbitrage, bonus_abuse)
+窗口:    {window}        (例如 last_24h)
+UID:     {uid}
+数据:    { ...第 3 节的数据包... }</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 5. LLM RESPONSE ============ -->
+      <section class="bilingual" id="s5">
+        <h2>
+          5. LLM Response (one schema for all four risks) /
+          大模型响应(四类风险共用同一 Schema)
+        </h2>
+        <div class="row">
+          <div class="col en">
+            <h3>English</h3>
+            <p>
+              The same schema is produced for all four risks. Only
+              <code>risk_type</code>, <code>evidence</code>,
+              <code>metrics</code>, and <code>suggested_actions</code> change.
+              <strong>Telegram message format is fixed.</strong> The LLM only
+              fills the values; it cannot change the structure.
+            </p>
+            <pre><code>{
+  "uid": "u_8a3f0b2",
+  "case_id": "C-2026-05-04-00128",
+  "risk_type": "latency_arbitrage",
+  "score": 87,
+  "band": "high",
+  "analysis": {
+    "pattern_recognised": "Sub-minute round trips with abnormally high win rate, clustered around price ticks ahead of our feed.",
+    "evidence": [
+      { "kind": "deal",  "id": 998877, "note": "EURUSD buy 10:21:00.250, closed 10:21:14.450, +17.00 USD, holding 14.2s" },
+      { "kind": "deal",  "id": 998881, "note": "EURUSD buy 10:34:02.110, closed 10:34:18.900, +21.00 USD, holding 16.8s" },
+      { "kind": "order", "id": 778899, "note": "request vs execution gap 220ms, fill in trader's favour" },
+      { "kind": "tick",  "id": "EURUSD@2026-05-04T10:21:00.100Z",
+                          "note": "External feed jumped 1.7 pips; our feed lagged ~150ms" }
+    ],
+    "metrics": {
+      "pct_deals_under_60s": 0.82,
+      "win_rate_sub_minute": 0.91,
+      "avg_holding_seconds": 14.3,
+      "symbol_concentration": 0.78
+    },
+    "narrative": "Across the last 24 hours, 218 deals were placed; 82% closed in under 60 seconds with a 91% win rate. Order timings show consistent execution favour of 150–220 ms. Trades cluster on EURUSD around fast-feed price jumps. Pattern is consistent with latency arbitrage."
+  },
+  "telegram_message": {
+    "format_id": "v1",
+    "lines": [
+      "🚨 BWG Risk Alert · Case C-2026-05-04-00128",
+      "Risk: Latency Arbitrage · Score 87 · Band HIGH",
+      "Account uid u_8a3f0b2 · window last 24h",
+      "82% trades <60s · win rate 91% · slippage 220ms in trader's favor",
+      "Verdict: pattern consistent with latency arbitrage",
+      "Suggested: Pause Withdrawal + Restrict Opening"
+    ]
+  },
+  "suggested_actions": ["pause_withdrawal", "restrict_open_new_position"],
+  "email_draft": {
+    "uid": "u_8a3f0b2",
+    "template_id": "account_under_review",
+    "language": "en",
+    "subject": "Update on your recent trading activity",
+    "body": "Dear Customer,\n\nWe are completing routine checks on your account. While this review is in progress, certain functions may be temporarily limited. We will update you within 3 business days.\n\nThank you for your patience,\nBWG"
+  }
+}</code></pre>
+          </div>
+
+          <div class="col zh">
+            <h3>中文</h3>
+            <p>
+              四类风险共用同一 Schema,只是
+              <code>risk_type</code
+              >、<code>evidence</code>、<code>metrics</code>、<code
+                >suggested_actions</code
+              >
+              不同。<strong>电报消息格式是固定的</strong>,大模型只填值,不能改结构。
+            </p>
+            <pre><code>{
+  "uid": "u_8a3f0b2",
+  "case_id": "C-2026-05-04-00128",
+  "risk_type": "latency_arbitrage",      // 风险类型
+  "score": 87,                            // 分数 0-100
+  "band": "high",                         // 等级
+  "analysis": {
+    "pattern_recognised": "次分钟级往返交易,胜率异常高,集中在我方行情滞后的价格跳动附近。",
+    "evidence": [
+      { "kind": "deal",  "id": 998877, "note": "EURUSD 买入 10:21:00.250,平仓 10:21:14.450,+17.00 美元,持仓 14.2 秒" },
+      { "kind": "deal",  "id": 998881, "note": "EURUSD 买入 10:34:02.110,平仓 10:34:18.900,+21.00 美元,持仓 16.8 秒" },
+      { "kind": "order", "id": 778899, "note": "请求与执行间隔 220 毫秒,成交价对交易者有利" },
+      { "kind": "tick",  "id": "EURUSD@2026-05-04T10:21:00.100Z",
+                          "note": "外部行情跳动 1.7 点;我方行情滞后约 150 毫秒" }
+    ],
+    "metrics": {
+      "pct_deals_under_60s": 0.82,        // 60 秒内平仓占比
+      "win_rate_sub_minute": 0.91,        // 次分钟交易胜率
+      "avg_holding_seconds": 14.3,        // 平均持仓秒数
+      "symbol_concentration": 0.78        // 品种集中度
+    },
+    "narrative": "过去 24 小时共 218 笔交易,82% 在 60 秒内平仓,胜率 91%。订单时间显示稳定的 150–220 毫秒执行有利偏移。交易集中在 EURUSD 的快速行情跳动附近。模式符合延迟套利特征。"
+  },
+  "telegram_message": {
+    "format_id": "v1",
+    "lines": [
+      "🚨 BWG 风控警报 · 案件 C-2026-05-04-00128",
+      "风险: 延迟套利 · 分数 87 · 等级 HIGH",
+      "账户 uid u_8a3f0b2 · 窗口 近 24 小时",
+      "82% 交易 <60秒 · 胜率 91% · 220ms 偏移利于交易者",
+      "判定: 符合延迟套利特征",
+      "建议: 暂停出金 + 限制开仓"
+    ]
+  },
+  "suggested_actions": ["pause_withdrawal", "restrict_open_new_position"],
+  "email_draft": {
+    "uid": "u_8a3f0b2",
+    "template_id": "account_under_review",
+    "language": "zh",
+    "subject": "关于您近期交易活动的通知",
+    "body": "尊敬的客户:\n\n我们正在对您的账户进行例行核查。核查期间,部分功能可能暂时受限。我们将在 3 个工作日内向您反馈结果。\n\n感谢您的理解,\nBWG"
+  }
+}</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 6. TELEGRAM ============ -->
+      <section class="bilingual" id="s6">
+        <h2>
+          6. Telegram Message (what the officer sees) /
+          电报消息(风控官员看到的内容)
+        </h2>
+        <div class="row">
+          <div class="col en">
+            <h3>English</h3>
+            <div class="telegram">
+              <div class="line">
+                🚨 BWG Risk Alert · Case C-2026-05-04-00128
+              </div>
+              <div class="line">
+                Risk: Latency Arbitrage · <span class="tag high">Score 87</span>
+                <span class="tag high">HIGH</span>
+              </div>
+              <div class="line">
+                Account uid <code>u_8a3f0b2</code> · window last 24h
+              </div>
+              <div class="line">
+                82% trades &lt;60s · win rate 91% · slippage 220ms in trader's
+                favor
+              </div>
+              <div class="line">
+                Verdict: pattern consistent with latency arbitrage
+              </div>
+              <div class="line">
+                Suggested: Pause Withdrawal + Restrict Opening
+              </div>
+              <div class="buttons">
+                <span class="btn">View Evidence</span>
+                <span class="btn">Pause Withdrawal</span>
+                <span class="btn">Restrict Opening</span>
+                <span class="btn">Full Suspend</span>
+                <span class="btn">Generate Email</span>
+                <span class="btn">Assign CS</span>
+                <span class="btn">Watch Only</span>
+                <span class="btn">Ignore</span>
+                <span class="btn">Escalate</span>
+              </div>
+            </div>
+            <p>
+              The same six-line shape is used for R2, R3, R4 — only the values
+              change.
+            </p>
+          </div>
+
+          <div class="col zh">
+            <h3>中文</h3>
+            <div class="telegram">
+              <div class="line">🚨 BWG 风控警报 · 案件 C-2026-05-04-00128</div>
+              <div class="line">
+                风险: 延迟套利 · <span class="tag high">分数 87</span>
+                <span class="tag high">HIGH</span>
+              </div>
+              <div class="line">
+                账户 uid <code>u_8a3f0b2</code> · 窗口 近 24 小时
+              </div>
+              <div class="line">
+                82% 交易 &lt;60秒 · 胜率 91% · 220ms 偏移利于交易者
+              </div>
+              <div class="line">判定: 符合延迟套利特征</div>
+              <div class="line">建议: 暂停出金 + 限制开仓</div>
+              <div class="buttons">
+                <span class="btn">查看证据</span>
+                <span class="btn">暂停出金</span>
+                <span class="btn">限制开仓</span>
+                <span class="btn">完全停用</span>
+                <span class="btn">生成邮件</span>
+                <span class="btn">分配客服</span>
+                <span class="btn">仅观察</span>
+                <span class="btn">忽略</span>
+                <span class="btn">上报</span>
+              </div>
+            </div>
+            <p>R2、R3、R4 使用相同的六行结构,只是数值不同。</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 7. ACTIONS ============ -->
+      <section class="bilingual" id="s7">
+        <h2>
+          7. Actions (Telegram tap → callback → your POST API) / 操作(电报按钮 →
+          回调 → 你的 POST API)
+        </h2>
+        <div class="row">
+          <div class="col en">
+            <h3>English</h3>
+            <h4>7.1 The flow</h4>
+            <ol>
+              <li>Officer taps a button in Telegram.</li>
+              <li>Telegram sends a callback to my service.</li>
+              <li>
+                My service verifies: officer is on the allow-list, case state
+                allows this action, idempotency key is fresh.
+              </li>
+              <li>
+                For critical actions (Suspend, Close Account, Profit
+                Adjustment): we send a "Confirm?" reply and wait for a second
+                tap.
+              </li>
+              <li>My service calls your POST API with an idempotency key.</li>
+              <li>Audit row is written before and after the call.</li>
+            </ol>
+
+            <h4>7.2 The POST APIs I will call (assumed names)</h4>
+            <table>
+              <thead>
+                <tr>
+                  <th>Telegram button</th>
+                  <th>POST API</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Pause Withdrawal</td>
+                  <td>
+                    <code
+                      >pause_withdrawal(withdrawal_id, reason, case_id,
+                      idem_key)</code
+                    >
+                  </td>
+                  <td>Reversible</td>
+                </tr>
+                <tr>
+                  <td>Restrict Opening</td>
+                  <td>
+                    <code
+                      >restrict_open_new_position(login_id, reason, case_id,
+                      idem_key)</code
+                    >
+                  </td>
+                  <td>Reversible</td>
+                </tr>
+                <tr>
+                  <td>Full Suspend</td>
+                  <td>
+                    <code
+                      >suspend_trading(login_id, reason, case_id,
+                      idem_key)</code
+                    >
+                  </td>
+                  <td>2-step confirm</td>
+                </tr>
+                <tr>
+                  <td>Generate Email + Send</td>
+                  <td>
+                    <code
+                      >send_email(uid, subject, body, case_id, idem_key)</code
+                    >
+                  </td>
+                  <td>You resolve uid → email server-side</td>
+                </tr>
+                <tr>
+                  <td>Assign CS</td>
+                  <td>
+                    <code>assign_cs_followup(case_id, cs_user, due_at)</code>
+                  </td>
+                  <td>Internal</td>
+                </tr>
+                <tr>
+                  <td>Watch Only</td>
+                  <td>
+                    <code>update_case_state(case_id, "watching", note)</code>
+                  </td>
+                  <td>Internal</td>
+                </tr>
+                <tr>
+                  <td>Ignore</td>
+                  <td>
+                    <code>update_case_state(case_id, "ignored", note)</code>
+                  </td>
+                  <td>Internal</td>
+                </tr>
+                <tr>
+                  <td>Escalate</td>
+                  <td>
+                    <code>update_case_state(case_id, "escalated", note)</code>
+                  </td>
+                  <td>Internal</td>
+                </tr>
+                <tr>
+                  <td>(Profit clawback)</td>
+                  <td>
+                    <code
+                      >adjust_profit(deal_id, delta, reason, case_id,
+                      idem_key)</code
+                    >
+                  </td>
+                  <td>2-step confirm</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="col zh">
+            <h3>中文</h3>
+            <h4>7.1 流程</h4>
+            <ol>
+              <li>风控官员在电报里点击按钮。</li>
+              <li>电报把回调请求发给我的服务。</li>
+              <li>
+                我的服务校验:官员在白名单中、案件状态允许该操作、幂等键有效。
+              </li>
+              <li>
+                对关键操作(完全停用、关闭账户、利润追回):我们回一条"是否确认?",等待第二次点击。
+              </li>
+              <li>我的服务带幂等键调用你的 POST API。</li>
+              <li>调用前后各写一条审计记录。</li>
+            </ol>
+
+            <h4>7.2 我将调用的 POST API(假设命名)</h4>
+            <table>
+              <thead>
+                <tr>
+                  <th>电报按钮</th>
+                  <th>POST API</th>
+                  <th>说明</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>暂停出金</td>
+                  <td>
+                    <code
+                      >pause_withdrawal(withdrawal_id, reason, case_id,
+                      idem_key)</code
+                    >
+                  </td>
+                  <td>可撤销</td>
+                </tr>
+                <tr>
+                  <td>限制开仓</td>
+                  <td>
+                    <code
+                      >restrict_open_new_position(login_id, reason, case_id,
+                      idem_key)</code
+                    >
+                  </td>
+                  <td>可撤销</td>
+                </tr>
+                <tr>
+                  <td>完全停用</td>
+                  <td>
+                    <code
+                      >suspend_trading(login_id, reason, case_id,
+                      idem_key)</code
+                    >
+                  </td>
+                  <td>需二次确认</td>
+                </tr>
+                <tr>
+                  <td>生成邮件并发送</td>
+                  <td>
+                    <code
+                      >send_email(uid, subject, body, case_id, idem_key)</code
+                    >
+                  </td>
+                  <td>你在后端把 uid 解析为邮箱地址</td>
+                </tr>
+                <tr>
+                  <td>分配客服</td>
+                  <td>
+                    <code>assign_cs_followup(case_id, cs_user, due_at)</code>
+                  </td>
+                  <td>内部</td>
+                </tr>
+                <tr>
+                  <td>仅观察</td>
+                  <td>
+                    <code>update_case_state(case_id, "watching", note)</code>
+                  </td>
+                  <td>内部</td>
+                </tr>
+                <tr>
+                  <td>忽略</td>
+                  <td>
+                    <code>update_case_state(case_id, "ignored", note)</code>
+                  </td>
+                  <td>内部</td>
+                </tr>
+                <tr>
+                  <td>上报</td>
+                  <td>
+                    <code>update_case_state(case_id, "escalated", note)</code>
+                  </td>
+                  <td>内部</td>
+                </tr>
+                <tr>
+                  <td>(利润追回)</td>
+                  <td>
+                    <code
+                      >adjust_profit(deal_id, delta, reason, case_id,
+                      idem_key)</code
+                    >
+                  </td>
+                  <td>需二次确认</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 8. WHOLE FLOW ============ -->
+      <section class="bilingual" id="s8">
+        <h2>8. The Whole Flow on One Page / 完整流程一页纸</h2>
+        <div class="row">
+          <div class="col en">
+            <h3>English</h3>
+            <div class="flow">
+              Your read APIs (§3 data bundle) │ ▼ Per-uid data bundle (no PII) │
+              ▼ LLM prompt (§4) — one template, parameterised by risk │ ▼ LLM
+              response (§5) — fixed JSON schema for all four risks │ ▼ Telegram
+              message (§6) — fixed 6-line format │ ▼ (officer taps a button)
+              Telegram callback → my service validates │ ▼ POST to your write
+              APIs (§7.2) with idempotency key │ ▼ Audit row written
+            </div>
+          </div>
+          <div class="col zh">
+            <h3>中文</h3>
+            <div class="flow">
+              你的读取 API(第 3 节数据包) │ ▼ 按 uid 组装的数据包(无 PII) │ ▼
+              大模型提示词(第 4 节) — 单一模板,按风险参数化 │ ▼ 大模型响应(第 5
+              节) — 四类风险共用 JSON Schema │ ▼ 电报消息(第 6 节) — 固定 6
+              行格式 │ ▼ (官员点击按钮) 电报回调 → 我的服务校验 │ ▼
+              带幂等键调用你的写入 API(第 7.2 节) │ ▼ 写入审计记录
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 9. QUESTIONS FOR ALEX ============ -->
+      <section class="bilingual" id="s9">
+        <h2>9. Questions for Alex / 给 Alex 的问题</h2>
+        <div class="row">
+          <div class="col en">
+            <h3>English</h3>
+            <p>
+              Only the questions that block this five-step flow. Everything else
+              can wait.
+            </p>
+
+            <h4>9.1 Read APIs (§3)</h4>
+            <div class="question">
+              <span class="num">Q1.</span> Of the 11 data bundles in §3, which
+              already exist as endpoints, which need to be built, and what are
+              the actual names?
+            </div>
+            <div class="question">
+              <span class="num">Q2.</span> Confirm: IPs and device fingerprints
+              arrive <strong>hashed</strong>, and names/emails/phones never
+              appear.
+            </div>
+            <div class="question">
+              <span class="num">Q3.</span> Tick data resolution: millisecond or
+              second?
+            </div>
+
+            <h4>9.2 Auth & transport</h4>
+            <div class="question">
+              <span class="num">Q4.</span> How do I authenticate to your APIs?
+              (API key? mTLS? per-call token?)
+            </div>
+
+            <h4>9.3 Events vs polling</h4>
+            <div class="question">
+              <span class="num">Q5.</span> Can you push the five event types
+              (withdrawal_submitted, abnormal_short_term_profit,
+              high_frequency_trading, news_event_window, suspicious_bonus_usage)
+              over webhook with HMAC, or do I poll?
+            </div>
+
+            <h4>9.4 Write APIs (§7)</h4>
+            <div class="question">
+              <span class="num">Q6.</span> Of the 9 POST APIs in §7.2, which
+              exist and which need to be built?
+            </div>
+            <div class="question">
+              <span class="num">Q7.</span> Do all write APIs accept an
+              <strong>idempotency key</strong>?
+            </div>
+            <div class="question">
+              <span class="num">Q8.</span> Is <code>adjust_profit</code> an API
+              today, or a manual back-office task?
+            </div>
+            <div class="question">
+              <span class="num">Q9.</span> Confirm
+              <code>send_email(uid, subject, body, case_id, idem_key)</code> —
+              your backend resolves <code>uid → email address</code> internally;
+              my service never sees the address.
+            </div>
+
+            <p style="margin-top: 14px; color: var(--muted)">
+              <em
+                >That is all I need from you to start. Anything else is my
+                problem to solve.</em
+              >
+            </p>
+          </div>
+
+          <div class="col zh">
+            <h3>中文</h3>
+            <p>只列出阻塞这五步流程的问题。其它都可以稍后再说。</p>
+
+            <h4>9.1 读取 API(第 3 节)</h4>
+            <div class="question">
+              <span class="num">Q1.</span> 第 3 节列出的 11
+              个数据包,哪些已有接口?哪些需要新建?各自的真实接口名是什么?
+            </div>
+            <div class="question">
+              <span class="num">Q2.</span> 请确认:IP
+              和设备指纹是<strong>哈希后</strong>下发的,姓名/邮箱/电话从不返回。
+            </div>
+            <div class="question">
+              <span class="num">Q3.</span> Tick 行情数据精度是毫秒还是秒?
+            </div>
+
+            <h4>9.2 鉴权与传输</h4>
+            <div class="question">
+              <span class="num">Q4.</span> 我怎么认证到你的 API?(API
+              Key?mTLS?单次调用 Token?)
+            </div>
+
+            <h4>9.3 事件推送 vs 轮询</h4>
+            <div class="question">
+              <span class="num">Q5.</span> 这 5
+              类事件(withdrawal_submitted、abnormal_short_term_profit、high_frequency_trading、news_event_window、suspicious_bonus_usage)能否通过带
+              HMAC 签名的 Webhook 推送给我?还是需要我轮询?
+            </div>
+
+            <h4>9.4 写入 API(第 7 节)</h4>
+            <div class="question">
+              <span class="num">Q6.</span> 第 7.2 节列出的 9 个 POST
+              API,哪些已存在?哪些需要新建?
+            </div>
+            <div class="question">
+              <span class="num">Q7.</span> 所有写入 API
+              是否都接受<strong>幂等键</strong>?
+            </div>
+            <div class="question">
+              <span class="num">Q8.</span>
+              <code>adjust_profit</code> 是接口,还是后台手工操作?
+            </div>
+            <div class="question">
+              <span class="num">Q9.</span> 请确认
+              <code>send_email(uid, subject, body, case_id, idem_key)</code> ——
+              你的后端在内部把
+              <code>uid</code> 解析为邮箱地址,我的服务从不接触邮箱地址。
+            </div>
+
+            <p style="margin-top: 14px; color: var(--muted)">
+              <em>这就是开工所需的全部信息。其它问题由我自己解决。</em>
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 10. NEXT MOVES ============ -->
+      <section class="bilingual" id="s10">
+        <h2>10. My Next Moves / 我的下一步</h2>
+        <div class="row">
+          <div class="col en">
+            <h3>English</h3>
+            <ol>
+              <li>Send this v8 to Alex with the 9 questions above.</li>
+              <li>
+                Build the mock data adapter for the 11 bundles in §3 so
+                detection prompts can be tested today.
+              </li>
+              <li>
+                Lock the LLM response schema (§5) and the Telegram message
+                format (§6) so they cannot drift.
+              </li>
+              <li>
+                Build the Telegram callback → POST API plumbing (§7) against the
+                mock adapter.
+              </li>
+            </ol>
+          </div>
+          <div class="col zh">
+            <h3>中文</h3>
+            <ol>
+              <li>把 v8 连同上面 9 个问题发给 Alex。</li>
+              <li>
+                为第 3 节的 11 个数据包搭建 Mock
+                数据适配器,这样今天就能测试检测提示词。
+              </li>
+              <li>
+                锁定大模型响应 Schema(第 5 节)和电报消息格式(第 6 节),防止漂移。
+              </li>
+              <li>基于 Mock 适配器搭建"电报回调 → POST API"链路(第 7 节)。</li>
+            </ol>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
