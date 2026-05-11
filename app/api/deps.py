@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from typing import Annotated, Awaitable, Callable
 
-from fastapi import Depends, Request
+from fastapi import Depends, HTTPException, Request
 
 from ..llm import LLMEvaluator
-from ..services import deliver as default_deliver
+from ..services import JobQueue, deliver as default_deliver
 
 
 CallbackFn = Callable[[list[dict]], Awaitable[dict]]
@@ -34,5 +34,21 @@ def get_callback(request: Request) -> CallbackFn:
     return cb or default_deliver
 
 
+def get_job_queue(request: Request) -> JobQueue:
+    queue: JobQueue | None = getattr(request.app.state, "job_queue", None)
+    if queue is None or not queue.enabled:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "job_worker_disabled",
+                "message": (
+                    "enqueue_and_callback requires JOB_WORKER_CONCURRENCY > 0"
+                ),
+            },
+        )
+    return queue
+
+
 EvaluatorDep = Annotated[LLMEvaluator, Depends(get_evaluator)]
 CallbackDep = Annotated[CallbackFn, Depends(get_callback)]
+JobQueueDep = Annotated[JobQueue, Depends(get_job_queue)]

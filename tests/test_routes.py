@@ -129,3 +129,98 @@ async def test_get_analyses_404_when_no_rows(client, db):
         params={"mt5_login": 99999, "start_time": "2026-05-08T00:00:00Z"},
     )
     assert resp.status_code == 404
+
+
+# -- Async / enqueue path -----------------------------------------------------
+
+
+async def _wait_for_run_status(client, run_id, target, *, timeout=2.0):
+    """Poll GET /runs/{id} until status reaches `target` or timeout."""
+    import asyncio
+
+    deadline = asyncio.get_event_loop().time() + timeout
+    last = None
+    while asyncio.get_event_loop().time() < deadline:
+        resp = await client.get(f"/runs/{run_id}")
+        assert resp.status_code == 200, resp.text
+        last = resp.json()
+        if last["status"] == target:
+            return last
+        await asyncio.sleep(0.02)
+    raise AssertionError(
+        f"run {run_id} never reached status={target}; last={last}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_analyse_risk_enqueue_returns_202_and_callback_fires(
+    client, evaluator, callback_fn
+):
+    _seed(evaluator)
+    payload = _envelope(make_snapshot_payload(mt5_login=70010))
+    payload["enqueue_and_callback"] = True
+
+    resp = await client.post("/analyse_risk", json=payload)
+    assert resp.status_code == 202
+    body = resp.json()
+    assert body["status"] == "queued"
+    assert body["snapshot_count"] == 1
+    run_id = body["run_id"]
+    assert body["poll_url"] == f"/runs/{run_id}"
+
+    final = await _wait_for_run_status(client, run_id, "completed")
+    assert final["callback_status"]["status"] == "delivered"
+    assert final["error"] is None
+
+    # Callback received exactly the same finding shape as the sync path.
+    assert len(callback_fn.calls) == 1
+    delivered = callback_fn.calls[0]
+    assert len(delivered) == len(ALL_RISKS)
+    assert {row["mt5_login"] for row in delivered} == {70010}
+
+
+@pytest.mark.asyncio
+async def test_get_run_404_for_unknown_id(client, db):
+    resp = await client.get("/runs/999999")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_analyse_risk_enqueue_503_when_worker_disabled(
+    db, evaluator, callback_fn
+):
+    """If the queue exists but is disabled (concurrency=0) the enqueue
+    path returns 503; the sync path still works."""
+    from httpx import ASGITransport, AsyncClient
+
+    from app.main import create_app
+    from app.services import JobQueue
+
+    disabled_queue = JobQueue(
+        evaluator_provider=lambda: evaluator,
+        callback_fn=callback_fn,
+        concurrency=0,
+    )
+    app = create_app(
+        evaluator=evaluator,
+        callback_fn=callback_fn,
+        init_database=False,
+        job_queue=disabled_queue,
+    )
+    _seed(evaluator)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        payload = _envelope(make_snapshot_payload(mt5_login=70011))
+        payload["enqueue_and_callback"] = True
+        resp = await ac.post("/analyse_risk", json=payload)
+        assert resp.status_code == 503
+        assert resp.json()["detail"]["error"] == "job_worker_disabled"
+
+        # Sync path on the same app still works.
+        sync_resp = await ac.post(
+            "/analyse_risk",
+            json=_envelope(make_snapshot_payload(mt5_login=70011)),
+        )
+        assert sync_resp.status_code == 200
+        assert len(sync_resp.json()) == len(ALL_RISKS)

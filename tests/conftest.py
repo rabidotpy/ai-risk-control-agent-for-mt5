@@ -22,6 +22,7 @@ from app.db import close_db, init_db
 from app.llm import LLMEvaluator
 from app.main import create_app
 from app.risks import Risk
+from app.services import JobQueue
 
 
 class FakeEvaluator:
@@ -74,12 +75,28 @@ def callback_fn() -> CapturingCallback:
 
 @pytest_asyncio.fixture
 async def app(evaluator, callback_fn, db):
-    """FastAPI app wired with fakes. Lifespan does NOT re-init the DB."""
-    return create_app(
-        evaluator=evaluator,
+    """FastAPI app wired with fakes. Lifespan does NOT re-init the DB.
+
+    A real `JobQueue` is wired and started inline (httpx's ASGITransport
+    does not trigger FastAPI lifespan events, so tests start the worker
+    explicitly here).
+    """
+    queue = JobQueue(
+        evaluator_provider=lambda: evaluator,
         callback_fn=callback_fn,
-        init_database=False,
+        concurrency=1,
+        max_size=64,
     )
+    await queue.start()
+    try:
+        yield create_app(
+            evaluator=evaluator,
+            callback_fn=callback_fn,
+            init_database=False,
+            job_queue=queue,
+        )
+    finally:
+        await queue.stop()
 
 
 @pytest_asyncio.fixture

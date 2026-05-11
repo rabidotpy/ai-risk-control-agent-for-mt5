@@ -27,12 +27,31 @@ class AnalyseRiskRequest(BaseModel):
     `include_history` overrides `settings.include_history_default` for
     this request. When False, no prior `RiskHistorySummary` is loaded
     into the prompt and no summary is upserted afterwards.
+
+    `enqueue_and_callback` (default False) flips the request into async
+    mode: the server enqueues the job, returns `202 Accepted` with a
+    `run_id`, and a background worker performs the analysis and POSTs
+    the result to `settings.callback_url` when done. The client may
+    also poll `GET /runs/{run_id}` for status. When False, the request
+    runs synchronously and the response body carries the findings.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     snapshots: list[AccountSnapshot]
     include_history: bool | None = None
+    enqueue_and_callback: bool = False
+
+
+class EnqueuedJob(BaseModel):
+    """Response body for the async enqueue path."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: int
+    status: str
+    poll_url: str
+    snapshot_count: int
 
 
 class BehaviorSummary(BaseModel):

@@ -19,11 +19,18 @@ from tortoise.models import Model
 
 
 class AnalysisRun(Model):
-    """One row per /analyse_risk HTTP call (covers N snapshots)."""
+    """One row per /analyse_risk HTTP call (covers N snapshots).
+
+    `status` lifecycle:
+      * sync path: row is created already in 'completed' (or 'failed').
+      * async path: 'queued' → 'running' → 'completed' | 'failed'.
+    """
 
     id = fields.IntField(primary_key=True)
     trigger_type = fields.CharField(max_length=64)
     snapshot_count = fields.IntField()
+    status = fields.CharField(max_length=16, default="completed")
+    error = fields.TextField(null=True)
     started_at = fields.DatetimeField(auto_now_add=True)
     finished_at = fields.DatetimeField(null=True)
     callback_status = fields.JSONField(null=True)

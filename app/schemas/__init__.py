@@ -1,6 +1,7 @@
 from .analysis import (
     AnalyseRiskRequest,
     BehaviorSummary,
+    EnqueuedJob,
     RiskFinding,
 )
 from .snapshot import (
@@ -21,6 +22,7 @@ __all__ = [
     "BehaviorSummary",
     "Bonus",
     "Deposit",
+    "EnqueuedJob",
     "LinkedAccount",
     "RiskFinding",
     "RiskLevel",

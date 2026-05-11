@@ -29,6 +29,15 @@ class Settings(BaseSettings):
     callback_url: str = ""
     callback_timeout_seconds: float = 10.0
 
+    # Background worker ----------------------------------------------------
+    # When a request sets `enqueue_and_callback=true`, /analyse_risk returns
+    # 202 Accepted and N background workers process the queue. The result is
+    # POSTed to `callback_url` when ready. 0 disables the worker entirely
+    # (the enqueue path will reject with 503).
+    job_worker_concurrency: int = 1
+    # Max in-memory queue depth — backpressure to prevent unbounded growth.
+    job_queue_max_size: int = 1000
+
     # Database -------------------------------------------------------------
     # Tortoise URL. SQLite in-memory for tests, Postgres in dev/prod.
     # Examples:
