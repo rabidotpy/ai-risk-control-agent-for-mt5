@@ -1,11 +1,11 @@
-"""Latency Arbitrage — PRD §6.3."""
+"""Latency Arbitrage."""
 
 from __future__ import annotations
 
-from .base import Risk, with_trend_rule
+from .base import Risk
 
 
-_BASE_SUB_RULES = (
+SUB_RULES = (
     "trade_count_6h >= 30",
     "median_holding_time_seconds <= 30",
     "positive_slippage_ratio >= 0.5",
@@ -13,7 +13,7 @@ _BASE_SUB_RULES = (
 )
 
 
-_BASE_RISK_PROMPT = """\
+_RISK_PROMPT = """\
 RISK BEING EVALUATED: Latency Arbitrage
 
 Latency arbitrage means a trader profits by exploiting stale or delayed
@@ -21,10 +21,10 @@ quotes. The fingerprint is: high frequency of trades, very short holding
 times, fills that beat the visible market quote at the moment of entry,
 and small but consistent profits taken seconds after entry.
 
-The data window is 6 hours; `current_window.trades` is the array of
-complete closed positions in that window.
+The data window is whatever `current_window` covers (typically 6 hours);
+`current_window.trades` is the array of complete closed positions.
 
-Evaluate exactly these 5 rules. They are independent — score each on its
+Evaluate exactly these 4 rules. They are independent — score each on its
 own merits. Do not let your judgment of one rule influence another.
 
 R1: trade_count_6h >= 30
@@ -52,13 +52,6 @@ R4: short_holding_ratio_30s >= 0.6
    TRUE iff ratio >= 0.6.
    If `current_window.trades` is empty: FALSE + "insufficient_data: no trades in window".
 """
-
-
-SUB_RULES, _RISK_PROMPT = with_trend_rule(
-    key="latency_arbitrage",
-    sub_rules=_BASE_SUB_RULES,
-    risk_prompt=_BASE_RISK_PROMPT,
-)
 
 
 LATENCY_ARBITRAGE = Risk(

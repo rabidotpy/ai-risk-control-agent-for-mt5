@@ -1,24 +1,19 @@
-"""Scalping Violation — PRD §6.3.
-
-R1 is the literal PRD threshold (`trade_count_24h >= 100`); it reads from
-`historical_context.lookbacks.trade_count_24h`. Until the local raw-pull
-cache contains 24h of pulls (4 scans), R1 returns insufficient_data.
-"""
+"""Scalping Violation."""
 
 from __future__ import annotations
 
-from .base import Risk, with_trend_rule
+from .base import Risk
 
 
-_BASE_SUB_RULES = (
-    "trade_count_24h >= 100",
+SUB_RULES = (
+    "trade_count_in_window >= 25",
     "short_holding_ratio_60s >= 0.7",
     "win_rate >= 0.75",
     "repeated_lot_sl_tp_pattern_ratio >= 0.5",
 )
 
 
-_BASE_RISK_PROMPT = """\
+_RISK_PROMPT = """\
 RISK BEING EVALUATED: Scalping Violation
 
 Scalping in this context means very short positions, very high frequency,
@@ -27,17 +22,11 @@ small per-trade profits, and a high win rate, often with a fixed pattern
 violation depends on the customer agreement; this evaluation flags the
 pattern only.
 
-The current data window is 6 hours; `current_window.trades` is the array
-of complete closed positions in that window. The 24h trade count comes
-from `historical_context.lookbacks.trade_count_24h`.
+Evaluate exactly these 4 rules. They are independent.
 
-Evaluate exactly these 5 rules. They are independent.
-
-R1: trade_count_24h >= 100
-   value = `historical_context.lookbacks.trade_count_24h`.
-   TRUE iff value >= 100.
-   If `historical_context` is null or `trade_count_24h` is missing/null:
-     FALSE + "insufficient_data: no historical context yet".
+R1: trade_count_in_window >= 25
+   count = len(current_window.trades).
+   TRUE iff count >= 25.
 
 R2: short_holding_ratio_60s >= 0.7
    For every trade in `current_window.trades` compute
@@ -65,13 +54,6 @@ R4: repeated_lot_sl_tp_pattern_ratio >= 0.5
    If fewer than 3 trades in `current_window.trades`: FALSE + \
 "insufficient_data: fewer than 3 trades — pattern detection not meaningful".
 """
-
-
-SUB_RULES, _RISK_PROMPT = with_trend_rule(
-    key="scalping",
-    sub_rules=_BASE_SUB_RULES,
-    risk_prompt=_BASE_RISK_PROMPT,
-)
 
 
 SCALPING = Risk(

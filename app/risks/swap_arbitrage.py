@@ -1,11 +1,11 @@
-"""Swap Arbitrage — PRD §6.3."""
+"""Swap Arbitrage."""
 
 from __future__ import annotations
 
-from .base import Risk, with_trend_rule
+from .base import Risk
 
 
-_BASE_SUB_RULES = (
+SUB_RULES = (
     "swap_profit_ratio >= 0.6",
     "positions_held_across_rollover >= 1",
     "swap_dominant_closed_positions >= 5",
@@ -13,7 +13,7 @@ _BASE_SUB_RULES = (
 )
 
 
-_BASE_RISK_PROMPT = """\
+_RISK_PROMPT = """\
 RISK BEING EVALUATED: Swap Arbitrage
 
 Swap arbitrage means the trader profits primarily from positive overnight
@@ -31,7 +31,7 @@ Each row in `current_window.trades` carries:
 Therefore: price_pnl = profit − swaps − commission. This isolates the
 P&L attributable purely to price movement.
 
-Evaluate exactly these 5 rules. They are independent.
+Evaluate exactly these 4 rules. They are independent.
 
 R1: swap_profit_ratio >= 0.6
    total_swap   = sum(t.swaps   for t in current_window.trades)
@@ -67,13 +67,6 @@ R4: average_price_movement_pnl_low
    If total_positive_swap <= 0 or `current_window.trades` is empty:
      FALSE + "insufficient_data: no positive-swap activity".
 """
-
-
-SUB_RULES, _RISK_PROMPT = with_trend_rule(
-    key="swap_arbitrage",
-    sub_rules=_BASE_SUB_RULES,
-    risk_prompt=_BASE_RISK_PROMPT,
-)
 
 
 SWAP_ARBITRAGE = Risk(

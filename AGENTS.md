@@ -20,7 +20,8 @@ Persistent project context lives in [`.agents/memory/`](.agents/memory/).
 ## Quick facts
 
 - Python 3.13, venv at `.venv/` — use `.venv/bin/python` (no `python` on PATH).
-- Tests: `.venv/bin/python -m pytest -q`
-- Local dev (no Mongo needed):
-  `MONGODB_URI=mongomock:// .venv/bin/flask --app app.api run --port 5050`
+- Stack: FastAPI + Tortoise ORM (Postgres prod / SQLite-memory tests) + httpx + anthropic AsyncAnthropic.
+- Tests: `.venv/bin/python -m pytest -q` (50 tests, async via pytest-asyncio).
+- Local dev (in-memory SQLite, no Postgres needed):
+  `DATABASE_URL=sqlite://:memory: .venv/bin/uvicorn app.main:app --port 5050`
 - Swagger UI: <http://127.0.0.1:5050/docs>

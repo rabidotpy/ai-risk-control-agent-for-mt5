@@ -1,4 +1,4 @@
-# BestWingGlobal MT5 AI Risk Control Agent MVP
+# HKMBBestWingGlobal MT5 AI Risk Control Agent MVP
 
 **PRD + Technical Implementation Plan**
 **Telegram Bot Lightweight Workflow Edition**

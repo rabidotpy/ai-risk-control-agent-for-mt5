@@ -1,60 +1,42 @@
-"""Callback delivery — failure modes and skip-when-unconfigured."""
+"""Callback delivery — settings-driven, never raises."""
 
 from __future__ import annotations
 
 from unittest.mock import patch
 
-import requests
+import httpx
+import pytest
 
-from app import callback
-
-
-def test_skips_when_url_not_configured(monkeypatch):
-    monkeypatch.setattr(callback.config, "CALLBACK_URL", "")
-    status = callback.deliver({"hello": "world"})
-    assert status["status"] == "skipped"
-    assert status["url"] is None
+from app.config import settings
+from app.services import deliver
 
 
-def test_records_http_status_on_success(monkeypatch):
-    monkeypatch.setattr(callback.config, "CALLBACK_URL", "https://example.test/cb")
-
-    class FakeResponse:
-        ok = True
-        status_code = 200
-
-    with patch.object(requests, "post", return_value=FakeResponse()) as mock_post:
-        status = callback.deliver({"hello": "world"})
-
-    assert status == {
-        "url": "https://example.test/cb",
-        "status": "delivered",
-        "http_status": 200,
-    }
-    mock_post.assert_called_once()
-    _, kwargs = mock_post.call_args
-    assert kwargs["json"] == {"hello": "world"}
+@pytest.mark.asyncio
+async def test_skipped_when_no_url(monkeypatch):
+    monkeypatch.setattr(settings, "callback_url", "")
+    out = await deliver([{"x": 1}])
+    assert out["status"] == "skipped"
 
 
-def test_records_rejected_on_4xx(monkeypatch):
-    monkeypatch.setattr(callback.config, "CALLBACK_URL", "https://example.test/cb")
-
-    class FakeResponse:
-        ok = False
-        status_code = 422
-
-    with patch.object(requests, "post", return_value=FakeResponse()):
-        status = callback.deliver({})
-
-    assert status["status"] == "rejected"
-    assert status["http_status"] == 422
+@pytest.mark.asyncio
+async def test_records_error_on_network_failure(monkeypatch):
+    monkeypatch.setattr(settings, "callback_url", "http://does-not-resolve.invalid/cb")
+    with patch.object(
+        httpx.AsyncClient, "post", side_effect=httpx.ConnectError("boom")
+    ):
+        out = await deliver([{"x": 1}])
+    assert out["status"] == "error"
+    assert "boom" in out["reason"]
 
 
-def test_records_error_on_network_failure(monkeypatch):
-    monkeypatch.setattr(callback.config, "CALLBACK_URL", "https://example.test/cb")
+@pytest.mark.asyncio
+async def test_marks_delivered_on_2xx(monkeypatch):
+    monkeypatch.setattr(settings, "callback_url", "http://callback.test/cb")
 
-    with patch.object(requests, "post", side_effect=requests.ConnectionError("boom")):
-        status = callback.deliver({})
+    async def fake_post(self, url, *, json):
+        return httpx.Response(200, request=httpx.Request("POST", url))
 
-    assert status["status"] == "error"
-    assert "ConnectionError" in status["reason"]
+    with patch.object(httpx.AsyncClient, "post", new=fake_post):
+        out = await deliver([{"x": 1}])
+    assert out["status"] == "delivered"
+    assert out["http_status"] == 200

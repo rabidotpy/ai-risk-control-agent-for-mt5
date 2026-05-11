@@ -2,65 +2,74 @@
 
 ## Stack
 
-- Python 3.13, Flask 3, pydantic 2, pymongo 4 + mongomock 4 (tests + dev), APScheduler 3, anthropic 0.100, PyYAML 6.
-- Venv at `.venv/` — always invoke via `.venv/bin/python` / `.venv/bin/pip` / `.venv/bin/flask` (no `python` on PATH).
+- Python 3.13, FastAPI 0.136, uvicorn 0.46, Tortoise ORM 1.1 (asyncpg / aiosqlite), pydantic 2 + pydantic-settings 2, httpx 0.28, anthropic 0.100 (AsyncAnthropic), pytest-asyncio 1.3.
+- Venv at `.venv/` — always invoke via `.venv/bin/python` / `.venv/bin/pip` / `.venv/bin/uvicorn` (no `python` on PATH).
+- Mongo, Flask, APScheduler, Alex client, raw-pulls cache, mongomock, PyYAML have all been REMOVED.
 
 ## Layout
 
-- `app/api.py` — Flask `create_app(evaluator, callback_fn, mongo_client, alex_client)`.
-- `app/engine.py` — `analyse(snapshot, evaluator, risks=ALL_RISKS, historical_context=None)`. Wraps payload as `{"current_window", "historical_context"}` JSON.
-- `app/risks/{latency_arbitrage,scalping,swap_arbitrage,bonus_abuse}.py` — each `Risk` built via `with_trend_rule(...)`. Sub-rule counts: latency=5, scalping=5, swap=5, bonus=6 (last is `prior_high_or_critical_in_last_5_scans >= 3`).
-- `app/risks/base.py` — preamble + `TREND_RULE` + `with_trend_rule()`.
-- `app/ingest/alex_client.py` — `AlexClient` Protocol, `StubAlexClient` (loads `tests/fixtures/alex_*.json` or `alex_window.json`), `HttpAlexClient`, `get_default_client()` (mode = `ALEX_MODE` env, default `stub`).
-- `app/db/client.py` (`risk_analyses` coll) + `app/db/raw_pulls.py` (TTL=35d on `pulled_at`, unique window) + `app/db/repo.py` + `app/db/history.py`.
-- `app/history/aggregator.py` — `build_historical_context(...)` returns `{"lookbacks": {...}, "trend_by_risk": {...}}`. Reads `close_time` (serialised) on trades, NOT alias `time`.
-- `app/jobs/scan_job.py` — `run_scan(...)` + `latest_completed_window()` (aligns to 00/06/12/18 UTC). `ScanResult` dataclass.
-- `app/jobs/scheduler.py` — APScheduler `BackgroundScheduler` cron `0 SCHEDULER_HOURS * * *` UTC. Disabled unless `SCHEDULER_ENABLED=true`. Module entrypoint at `python -m app.jobs.scheduler`.
-- `app/openapi.yaml` — hand-written OpenAPI 3.1 spec served at `GET /openapi.yaml`; Swagger UI at `GET /docs` (CDN-loaded).
+- `app/main.py` — `create_app(evaluator, callback_fn, init_database=True)`. Lifespan does `init_db()`/`close_db()`. Module-level `app = create_app()` for `uvicorn app.main:app`.
+- `app/config.py` — `Settings(BaseSettings)` (pydantic-settings, `.env`). Vars: `anthropic_api_key`, `claude_model`, `claude_max_tokens`, `callback_url`, `callback_timeout_seconds`, `database_url` (default `sqlite://:memory:`), `include_history_default` (bool).
+- `app/schemas/snapshot.py` — `AccountSnapshot`, `Trade` (alias `time` ↔ `close_time`, `extra=forbid`, `comment: str = ""`), `Deposit`, `Withdraw`, `Bonus`, `LinkedAccount`, `RiskLevel`, `TriggerType`.
+- `app/schemas/analysis.py` — `AnalyseRiskRequest`, `BehaviorSummary`, `RiskFinding` (= old `RiskResult` shape + `behavior_summary: dict | None`).
+- `app/models/analysis.py` — Tortoise tables: `AnalysisRun` (one row per HTTP call), `RiskEvaluation` (FK→run; indexed on `(mt5_login, risk_key)` and `(mt5_login, window_start)`; append-only audit), `RiskHistorySummary` (`unique_together=(mt5_login, risk_key)`; the rolling per-user-per-risk row).
+- `app/db/init.py` — `TORTOISE_ORM` dict; `init_db(generate_schemas=True)` / `close_db()`. **`use_tz=True, timezone="UTC"`** — naive datetimes will warn.
+- `app/risks/{base,latency_arbitrage,scalping,swap_arbitrage,bonus_abuse}.py` — `Risk` dataclass + `REPORT_EVALUATION_TOOL` (single tool, `required=[evaluations, summary, behavior_summary]`). **TREND_RULE / `with_trend_rule()` REMOVED.** Sub-rule counts: latency=4, scalping=4, swap=4, bonus=5. Lookback rules replaced with in-window equivalents (e.g. `trade_count_in_window>=25`, `trades_after_bonus_in_window>=8`, `withdrawal_after_bonus_in_window`).
+- `app/llm/prompts.py` — `build_user_payload(snapshot, prior_behavior_summary)` returns JSON `{current_window, prior_behavior_summary}`.
+- `app/llm/evaluator.py` — `LLMEvaluator` Protocol (async); `AsyncAnthropicEvaluator.evaluate(risk, payload_json)` returns the tool_use input dict. Forced tool use, ephemeral system-prompt cache.
+- `app/services/scoring.py` — `compute_score`, `score_to_level`, `level_to_action` (formula unchanged: `round(true/N*100)`; bands 0/40/60/75/90).
+- `app/services/callback.py` — async `deliver(body)` via httpx, never raises. Skips when `settings.callback_url` is empty.
+- `app/services/analysis.py` — orchestrator. `analyse_snapshots(snapshots, evaluator, include_history, trigger_type) -> (AnalysisRun, [RiskFinding])`. Per-risk: `_load_prior_summary` → `build_user_payload` → `evaluator.evaluate` → `_build_finding` → persist `RiskEvaluation` → `_upsert_summary` (only when `include_history` AND AI returned a summary). Per-risk `async with in_transaction()` so one risk's failure doesn't lose the others; failed risk = zero-score "low" finding with `evidence={"error": "..."}`.
+- `app/api/deps.py` — `get_evaluator` / `get_callback` from `app.state` (lazy `AsyncAnthropic` default).
+- `app/api/routes.py` — endpoints below. `_coerce_snapshots()` accepts: single dict / list / `{snapshots, include_history}` envelope. ValidationError → 400 with `index` of offender.
 
 ## Endpoints
 
-- `GET /healthz`, `GET /openapi.yaml`, `GET /docs`
-- `POST /analyse_risk` — body = AccountSnapshot, runs all risks synchronously
-- `POST /run_scan` — optional `{start_time, end_time}`, defaults to latest completed 6h window. trigger_type=manual_run. 502 on Alex error.
-- `GET /analyses?mt5_login=...&start_time=ISO`
+- `GET /healthz` — `{"status":"ok"}`
+- `POST /analyse_risk` — body = `AccountSnapshot` | `[AccountSnapshot]` | `{snapshots, include_history}`. Returns flat `[RiskFinding]`. Fires callback once. Persists `AnalysisRun` (with `callback_status`, `finished_at`).
+- `GET /analyses?mt5_login=&start_time=ISO` — 404 if empty.
+- `GET /history?mt5_login=` — list of `RiskHistorySummary` rows.
 
-## Config (app/config.py)
+## History-aggregation contract (the core feature)
 
-- `MONGODB_URI` — supports `mongomock://` for in-process mongomock (no docker/mongo needed). Logged with WARNING.
-- `MONGODB_DATABASE`, `MONGODB_COLLECTION` (`risk_analyses`), `RAW_PULLS_COLLECTION`, `RAW_PULL_TTL_DAYS=35`.
-- `ALEX_MODE` (stub|http), `ALEX_BASE_URL`, `ALEX_API_KEY`, `ALEX_TIMEOUT_SECONDS`, `ALEX_STUB_FIXTURES_DIR=tests/fixtures`.
-- `SCHEDULER_ENABLED` (default false), `SCHEDULER_HOURS=0,6,12,18`.
+- ONE row per `(mt5_login, risk_key)` in `risk_history_summary`.
+- AI is the aggregator: each call's tool output MUST include `behavior_summary` (free-form object). On `include_history=True` the orchestrator overwrites the row with that object verbatim and bumps `run_count`.
+- On `include_history=False` the prior summary is NOT loaded into the prompt AND the post-call upsert is skipped.
+- The orchestrator NEVER feeds raw historical trades/runs back into the prompt — the only memory the AI sees is its own previous `behavior_summary`.
 
 ## Local dev quickstart
 
 ```
-MONGODB_URI=mongomock:// .venv/bin/flask --app app.api run --port 5050
+DATABASE_URL=sqlite://:memory: .venv/bin/uvicorn app.main:app --port 5050
 # Open http://127.0.0.1:5050/docs
-./tests/fixtures/snapshots/post_all.sh
 ```
-
-- DO NOT pipe `flask run` through `head` — pipe closing kills the server. Run unpiped.
 
 ## Tests
 
-- 108 tests, all passing. `python -m pytest -q` (use `.venv/bin/python -m pytest`).
-- `tests/conftest.py` exposes: `FakeEvaluator` (canned responses by risk.key), `CapturingCallback`, `mongo` (mongomock), `collection`, `client` (Flask test client). `client` does NOT pass `alex_client`; create custom fixture for /run_scan tests.
-- Snapshot fixtures at `tests/fixtures/snapshots/{clean_account,latency_arbitrage,scalping,swap_arbitrage,bonus_abuse}.json` + `post_all.sh` helper.
+- 50 tests, all passing, ~0.2s. `.venv/bin/python -m pytest -q`.
+- `pytest.ini`: `asyncio_mode=auto`, `asyncio_default_fixture_loop_scope=function`, DeprecationWarning ignored.
+- `tests/conftest.py` exposes: `db` (per-test SQLite-memory Tortoise via `init_db(generate_schemas=True)` then `Tortoise._drop_databases()`), `evaluator` (`FakeEvaluator` with `responses[risk.key]` dict + `calls` log), `callback_fn` (`CapturingCallback`), `app` (FastAPI wired with fakes, `init_database=False`), `client` (`httpx.AsyncClient` over `ASGITransport`). Helpers: `make_snapshot_payload(...)`, `canned_response(sub_rules, true_rules, behavior_summary)`.
+- Suite files: `test_schemas.py`, `test_scoring.py`, `test_risks.py`, `test_llm_prompt.py`, `test_analysis_service.py` (history-aggregation flow), `test_routes.py`, `test_callback.py`.
 
 ## Trade schema gotchas
 
-- `Trade` uses `populate_by_name=True`; wire field is `time` (alias), serialised name is `close_time`. `model_dump(mode='json')` emits `close_time`; aggregator must read `close_time`.
-- `extra="forbid"` on Trade/Deposit/Withdraw/Bonus — no unknown fields allowed.
-- mongomock strips tzinfo on stored datetimes — tests must `.replace(tzinfo=timezone.utc)` before comparing to original tz-aware datetimes.
+- `Trade` uses `populate_by_name=True`; wire field is `time` (alias), serialised name is `close_time`. `model_dump(mode='json')` emits `close_time`.
+- `extra="forbid"` on Trade/Deposit/Withdraw/Bonus.
+- `Trade.comment: str = ""` accepts broker free-text tags.
 
 ## Score arithmetic
 
-- `risk_score = round(true_count / num_sub_rules * 100)`. Levels: 0=none, 1-25=watch, 26-50=medium, 51-75=high, 76-100=critical.
-- Adding TREND_RULE bumped denominators (4→5 for 3 risks, 5→6 for bonus). Anyone editing tests must update score expectations.
+- `risk_score = round(true_count / num_sub_rules * 100)`. Levels: <40=low, 40-59=watch, 60-74=medium, 75-89=high, ≥90=critical.
 
 ## Common pitfalls hit
 
-- `replace_string_in_file` with prefix-only `oldString` left old body intact in test_e2e_mock.py → had to truncate with awk. Always include enough trailing context to encompass the full region.
-- Flask boot fails fast if pymongo can't reach Mongo; use `MONGODB_URI=mongomock://` for UI exploration.
-- No docker installed locally; MongoDB options are mongomock URI or `brew install mongodb-community@7.0`.
+- Tortoise with `use_tz=True` emits `RuntimeWarning` for naive datetimes — always use `datetime.now(timezone.utc)`, never `datetime.utcnow()`.
+- SQLite-memory + `use_tz=False` caused `/analyses` query 404s because tz-aware request datetimes didn't match naive stored ones. Fixed by `use_tz=True, timezone="UTC"` in TORTOISE_ORM.
+- httpx pinning: `httpx==0.30.x` doesn't exist; use `>=0.28`.
+- No Aerich migrations yet — `generate_schemas=True` on init. Switch to Aerich before first prod deploy.
+- Tortoise 1.x stores connections in a contextvar that is NOT propagated from the FastAPI lifespan task to request tasks. Use `RegisterTortoise(app, config=TORTOISE_ORM, _enable_global_fallback=True)` in lifespan, NOT raw `Tortoise.init()` — otherwise endpoints raise `RuntimeError: No TortoiseContext is currently active`. Tests can still call `init_db()` directly because pytest-asyncio runs them in the same task as the ASGITransport.
+- `/analyse_risk` accepts ONLY the envelope `{"snapshots": [...], "include_history": bool|null}` (Pydantic-bound). Bad payloads → FastAPI 422 with `loc: ["body","snapshots",<idx>,"<field>"]`, NOT custom 400.
+
+## Removed (do NOT reintroduce without a design doc)
+
+- Flask, APScheduler, mongomock, pymongo, requests, PyYAML, Alex client, raw-pulls cache, trend rule, lookback rules, scheduled scans.
