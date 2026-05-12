@@ -46,6 +46,7 @@ class Deposit(BaseModel):
     group: str
     time: datetime
     profit: float
+    comment: str = ""
 
 
 class Withdraw(BaseModel):
@@ -58,6 +59,7 @@ class Withdraw(BaseModel):
     group: str
     time: datetime
     profit: float
+    comment: str = ""
 
 
 class Bonus(BaseModel):
@@ -70,6 +72,7 @@ class Bonus(BaseModel):
     group: str
     time: datetime
     profit: float
+    comment: str = ""
 
 
 class Trade(BaseModel):
