@@ -9,7 +9,7 @@
 ## Layout
 
 - `app/main.py` — `create_app(evaluator, callback_fn, init_database=True)`. Lifespan does `init_db()`/`close_db()`. Module-level `app = create_app()` for `uvicorn app.main:app`.
-- `app/config.py` — `Settings(BaseSettings)` (pydantic-settings, `.env`). Vars: `anthropic_api_key`, `claude_model`, `claude_max_tokens`, `callback_url`, `callback_timeout_seconds`, `database_url` (default `sqlite://:memory:`), `include_history_default` (bool).
+- `app/config.py` — `Settings(BaseSettings)` (pydantic-settings, `.env`). Vars: `anthropic_api_key`, `claude_model`, `claude_max_tokens`, `callback_url`, `callback_timeout_seconds`, `database_url` (default `sqlite://:memory:`), `include_history_default` (bool), `job_worker_concurrency`, `job_queue_max_size`, **`callback_min_score=60`** (per-account post-LLM filter threshold), **`prescreen_enabled=true`** (cheap deterministic gate before LLM).
 - `app/schemas/snapshot.py` — `AccountSnapshot`, `Trade` (alias `time` ↔ `close_time`, `extra=forbid`, `comment: str = ""`), `Deposit`, `Withdraw`, `Bonus`, `LinkedAccount`, `RiskLevel`, `TriggerType`.
 - `app/schemas/analysis.py` — `AnalyseRiskRequest`, `BehaviorSummary`, `RiskFinding` (= old `RiskResult` shape + `behavior_summary: dict | None`).
 - `app/models/analysis.py` — Tortoise tables: `AnalysisRun` (one row per HTTP call), `RiskEvaluation` (FK→run; indexed on `(mt5_login, risk_key)` and `(mt5_login, window_start)`; append-only audit), `RiskHistorySummary` (`unique_together=(mt5_login, risk_key)`; the rolling per-user-per-risk row).
@@ -19,14 +19,16 @@
 - `app/llm/evaluator.py` — `LLMEvaluator` Protocol (async); `AsyncAnthropicEvaluator.evaluate(risk, payload_json)` returns the tool_use input dict. Forced tool use, ephemeral system-prompt cache.
 - `app/services/scoring.py` — `compute_score`, `score_to_level`, `level_to_action` (formula unchanged: `round(true/N*100)`; bands 0/40/60/75/90).
 - `app/services/callback.py` — async `deliver(body)` via httpx, never raises. Skips when `settings.callback_url` is empty.
-- `app/services/analysis.py` — orchestrator. `analyse_snapshots(snapshots, evaluator, include_history, trigger_type) -> (AnalysisRun, [RiskFinding])`. Per-risk: `_load_prior_summary` → `build_user_payload` → `evaluator.evaluate` → `_build_finding` → persist `RiskEvaluation` → `_upsert_summary` (only when `include_history` AND AI returned a summary). Per-risk `async with in_transaction()` so one risk's failure doesn't lose the others; failed risk = zero-score "low" finding with `evidence={"error": "..."}`.
+- `app/services/prescreen.py` — `prescreen_snapshot(snapshot, *, risks, use_history) -> dict[risk_key, bool]`. Per-risk cheap predicate (latency/scalping: trade-count thresholds 20/15; swap: any non-zero `swaps`; bonus: any bonus/withdraw/≥2 linked accounts). History override: prior `RiskHistorySummary.last_score >= callback_min_score` forces re-evaluation. When `prescreen_enabled=False` returns all True.
+- `app/services/filtering.py` — `filter_high_risk_accounts(findings, *, min_score) -> list[RiskFinding]`. Pure function. Per-account: keep ALL rows for any login whose `max(risk_score) >= min_score`. Preserves input order.
+- `app/services/analysis.py` — orchestrator. `analyse_snapshots(snapshots, evaluator, include_history, trigger_type) -> (AnalysisRun, [RiskFinding])`. Calls `prescreen_snapshot` once per snapshot. Per-risk: if prescreen=False → `_build_skipped_finding` (score=0, level=low, `evidence={"prescreen": ...}`) + persist stub `RiskEvaluation`, no LLM call, no history upsert. If prescreen=True → `_load_prior_summary` → `build_user_payload` → `evaluator.evaluate` → `_build_finding` → persist `RiskEvaluation` → `_upsert_summary` (only when `include_history` AND AI returned a summary). Per-risk `async with in_transaction()` isolates failures.
 - `app/api/deps.py` — `get_evaluator` / `get_callback` from `app.state` (lazy `AsyncAnthropic` default).
 - `app/api/routes.py` — endpoints below. `_coerce_snapshots()` accepts: single dict / list / `{snapshots, include_history}` envelope. ValidationError → 400 with `index` of offender.
 
 ## Endpoints
 
 - `GET /healthz` — `{"status":"ok"}`
-- `POST /analyse_risk` — body = `AccountSnapshot` | `[AccountSnapshot]` | `{snapshots, include_history}`. Returns flat `[RiskFinding]`. Fires callback once. Persists `AnalysisRun` (with `callback_status`, `finished_at`).
+- `POST /analyse_risk` — body = `AccountSnapshot` | `[AccountSnapshot]` | `{snapshots, include_history, enqueue_and_callback}`. Returns flat `[RiskFinding]` **filtered by `callback_min_score`** (per-account). Same filtered list is sent to the callback. Persisted `RiskEvaluation` rows under `/analyses` are NEVER filtered — full audit trail.
 - `GET /analyses?mt5_login=&start_time=ISO` — 404 if empty.
 - `GET /history?mt5_login=` — list of `RiskHistorySummary` rows.
 
@@ -46,10 +48,10 @@ DATABASE_URL=sqlite://:memory: .venv/bin/uvicorn app.main:app --port 5050
 
 ## Tests
 
-- 50 tests, all passing, ~0.2s. `.venv/bin/python -m pytest -q`.
+- 69 tests, all passing, ~0.4s. `.venv/bin/python -m pytest -q`.
 - `pytest.ini`: `asyncio_mode=auto`, `asyncio_default_fixture_loop_scope=function`, DeprecationWarning ignored.
-- `tests/conftest.py` exposes: `db` (per-test SQLite-memory Tortoise via `init_db(generate_schemas=True)` then `Tortoise._drop_databases()`), `evaluator` (`FakeEvaluator` with `responses[risk.key]` dict + `calls` log), `callback_fn` (`CapturingCallback`), `app` (FastAPI wired with fakes, `init_database=False`), `client` (`httpx.AsyncClient` over `ASGITransport`). Helpers: `make_snapshot_payload(...)`, `canned_response(sub_rules, true_rules, behavior_summary)`.
-- Suite files: `test_schemas.py`, `test_scoring.py`, `test_risks.py`, `test_llm_prompt.py`, `test_analysis_service.py` (history-aggregation flow), `test_routes.py`, `test_callback.py`.
+- `tests/conftest.py` exposes: `db` (per-test SQLite-memory Tortoise), `evaluator` (`FakeEvaluator`), `callback_fn` (`CapturingCallback`), `app`, `client`. Helpers: `make_snapshot_payload(...)`, `canned_response(sub_rules, true_rules, behavior_summary)`. **Autouse fixture `_disable_filters_by_default` sets `settings.prescreen_enabled=False` and `settings.callback_min_score=0`** so legacy tests see every finding; tests that exercise the gates monkeypatch them back on.
+- Suite files: `test_schemas.py`, `test_scoring.py`, `test_risks.py`, `test_llm_prompt.py`, `test_analysis_service.py`, `test_routes.py`, `test_callback.py`, `test_prescreen.py`, `test_filtering.py`, `test_high_risk_gate.py`.
 
 ## Trade schema gotchas
 

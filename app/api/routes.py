@@ -20,7 +20,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from ..config import settings
 from ..models import AnalysisRun, RiskEvaluation, RiskHistorySummary
 from ..schemas.analysis import AnalyseRiskRequest, EnqueuedJob, RiskFinding
-from ..services import Job, analyse_snapshots
+from ..services import Job, analyse_snapshots, filter_high_risk_accounts
 from .deps import CallbackDep, EvaluatorDep, get_job_queue
 
 
@@ -121,20 +121,27 @@ async def analyse_risk(
         trigger_type=trigger,
     )
 
-    body = [f.model_dump(mode="json") for f in findings]
+    # Forward only accounts whose max risk_score crosses the threshold.
+    # Stored RiskEvaluation rows are unaffected — /analyses still shows
+    # everything for audit purposes.
+    outbound = filter_high_risk_accounts(
+        findings, min_score=settings.callback_min_score
+    )
+    body = [f.model_dump(mode="json") for f in outbound]
     cb_status = await callback_fn(body)
     run.status = "completed"
     run.callback_status = cb_status
     run.finished_at = datetime.now(timezone.utc)
     await run.save()
     logger.info(
-        "analyse_risk: done run_id=%s findings=%d callback=%s",
+        "analyse_risk: done run_id=%s findings=%d forwarded=%d callback=%s",
         run.id,
         len(findings),
+        len(outbound),
         cb_status.get("status"),
     )
 
-    return findings
+    return outbound
 
 
 @router.get("/runs/{run_id}", response_model=dict)

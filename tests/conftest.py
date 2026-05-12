@@ -18,6 +18,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from tortoise import Tortoise
 
+from app.config import settings
 from app.db import close_db, init_db
 from app.llm import LLMEvaluator
 from app.main import create_app
@@ -61,6 +62,16 @@ async def db():
     finally:
         await Tortoise._drop_databases()
         await close_db()
+
+
+@pytest.fixture(autouse=True)
+def _disable_filters_by_default(monkeypatch):
+    """Existing tests assume every (snapshot × risk) reaches the LLM and
+    every finding is forwarded. Tests that exercise the prescreen or the
+    high-risk filter override these via their own monkeypatch.
+    """
+    monkeypatch.setattr(settings, "prescreen_enabled", False)
+    monkeypatch.setattr(settings, "callback_min_score", 0)
 
 
 @pytest.fixture

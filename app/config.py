@@ -52,5 +52,18 @@ class Settings(BaseSettings):
     # upserted. Per-request `include_history` overrides this default.
     include_history_default: bool = True
 
+    # High-risk filter -----------------------------------------------------
+    # Accounts whose maximum per-risk score is below this threshold are
+    # dropped from the /analyse_risk response and from the callback POST
+    # to Alex. Stored `RiskEvaluation` rows are NEVER filtered — the audit
+    # trail in /analyses always shows the full picture.
+    callback_min_score: int = 60
+
+    # Cheap deterministic gate that runs before the LLM. Risks whose
+    # prescreen returns False are not sent to Claude; a synthetic
+    # `risk_score=0` row is persisted instead so the audit trail stays
+    # complete. Disable to force every risk through the LLM.
+    prescreen_enabled: bool = True
+
 
 settings = Settings()

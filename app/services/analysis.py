@@ -24,6 +24,7 @@ from ..llm import LLMEvaluator, build_user_payload
 from ..models import AnalysisRun, RiskEvaluation, RiskHistorySummary
 from ..risks import ALL_RISKS, Risk
 from ..schemas import AccountSnapshot, RiskFinding
+from .prescreen import prescreen_snapshot
 from .scoring import compute_score, level_to_action, score_to_level
 
 
@@ -117,6 +118,28 @@ async def _upsert_summary(
     await existing.save()
 
 
+def _build_skipped_finding(
+    *, risk: Risk, snapshot: AccountSnapshot
+) -> RiskFinding:
+    """Synthetic zero-score finding for a risk that failed prescreen.
+
+    Lets the audit trail in /analyses stay complete without burning an
+    LLM call. The `evidence` payload tells anyone reading the row why
+    the LLM was skipped.
+    """
+    return RiskFinding(
+        mt5_login=snapshot.mt5_login,
+        risk_type=risk.key,
+        risk_score=0,
+        risk_level="low",
+        trigger_type=snapshot.trigger_type,
+        evidence={"prescreen": "skipped: no rule could plausibly trip"},
+        suggested_action=level_to_action("low"),
+        analysis="prescreen: skipped LLM evaluation (no rule could trip)",
+        behavior_summary=None,
+    )
+
+
 async def _evaluate_one(
     *,
     risk: Risk,
@@ -192,7 +215,13 @@ async def analyse_snapshot(
     include_history: bool,
     risks: tuple[Risk, ...] = ALL_RISKS,
 ) -> list[RiskFinding]:
-    """Run every risk against one snapshot. Persist per-risk rows + upsert summaries."""
+    """Run every risk against one snapshot. Persist per-risk rows + upsert summaries.
+
+    Risks that fail the deterministic prescreen are persisted as
+    synthetic zero-score rows without an LLM call. Risks that pass go
+    through the full evaluator path. The behavior summary is only
+    upserted when the LLM actually ran.
+    """
     logger.info(
         "analyse_snapshot: login=%s window=%s..%s risks=%d",
         snapshot.mt5_login,
@@ -200,21 +229,29 @@ async def analyse_snapshot(
         snapshot.end_time.isoformat(),
         len(risks),
     )
+    decisions = await prescreen_snapshot(
+        snapshot, risks=risks, use_history=include_history
+    )
+
     findings: list[RiskFinding] = []
     for risk in risks:
-        finding, ai_summary = await _evaluate_one(
-            risk=risk,
-            snapshot=snapshot,
-            evaluator=evaluator,
-            include_history=include_history,
-        )
-        logger.info(
-            "risk evaluated login=%s risk=%s score=%d level=%s",
-            snapshot.mt5_login,
-            risk.key,
-            finding.risk_score,
-            finding.risk_level,
-        )
+        if not decisions.get(risk.key, True):
+            finding = _build_skipped_finding(risk=risk, snapshot=snapshot)
+            ai_summary = None
+        else:
+            finding, ai_summary = await _evaluate_one(
+                risk=risk,
+                snapshot=snapshot,
+                evaluator=evaluator,
+                include_history=include_history,
+            )
+            logger.info(
+                "risk evaluated login=%s risk=%s score=%d level=%s",
+                snapshot.mt5_login,
+                risk.key,
+                finding.risk_score,
+                finding.risk_level,
+            )
         findings.append(finding)
 
         # Persistence — one transaction per risk so a single risk failure

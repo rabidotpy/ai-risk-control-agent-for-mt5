@@ -30,6 +30,7 @@ from ..models import AnalysisRun
 from ..schemas import AccountSnapshot
 from .analysis import analyse_snapshot
 from .callback import deliver as default_deliver
+from .filtering import filter_high_risk_accounts
 
 
 logger = logging.getLogger(__name__)
@@ -128,7 +129,7 @@ class JobQueue:
 
         evaluator = self._evaluator_provider()
         try:
-            findings: list = []
+            all_findings: list = []
             for snapshot in job.snapshots:
                 snapshot_findings = await analyse_snapshot(
                     snapshot=snapshot,
@@ -136,7 +137,14 @@ class JobQueue:
                     run=run,
                     include_history=job.include_history,
                 )
-                findings.extend(snapshot_findings)
+                all_findings.extend(snapshot_findings)
+
+            # Same outbound filter as the sync route — Alex only sees
+            # accounts that crossed the threshold.
+            findings = filter_high_risk_accounts(
+                all_findings, min_score=settings.callback_min_score
+            )
+            total_findings = len(all_findings)
 
             body = [f.model_dump(mode="json") for f in findings]
             cb_status = await self._callback_fn(body)
@@ -145,8 +153,9 @@ class JobQueue:
             run.finished_at = datetime.now(timezone.utc)
             await run.save()
             logger.info(
-                "job completed run_id=%s findings=%d callback=%s",
+                "job completed run_id=%s findings=%d forwarded=%d callback=%s",
                 job.run_id,
+                total_findings,
                 len(findings),
                 cb_status.get("status"),
             )
