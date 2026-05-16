@@ -73,3 +73,54 @@ def test_account_snapshot_defaults_empty_arrays():
         }
     )
     assert snap.trades == [] and snap.bonus == [] and snap.linked_accounts == []
+
+
+# --- Envelope normalisation ---------------------------------------------------
+
+
+def _bare_snapshot():
+    return {
+        "mt5_login": 250030,
+        "trigger_type": "scheduled_scan",
+        "start_time": "2026-05-14T20:00:00Z",
+        "end_time": "2026-05-14T22:00:00Z",
+        "trades": [],
+        "deposits": [],
+        "withdraws": [],
+        "bonus": [],
+        "linked_accounts": [],
+    }
+
+
+def test_envelope_accepts_canonical_list():
+    from app.schemas.analysis import AnalyseRiskRequest
+
+    req = AnalyseRiskRequest.model_validate({"snapshots": [_bare_snapshot()]})
+    assert len(req.snapshots) == 1
+    assert req.snapshots[0].mt5_login == 250030
+
+
+def test_envelope_accepts_singular_snapshot_alias():
+    from app.schemas.analysis import AnalyseRiskRequest
+
+    req = AnalyseRiskRequest.model_validate({"snapshot": _bare_snapshot()})
+    assert len(req.snapshots) == 1
+    assert req.snapshots[0].mt5_login == 250030
+
+
+def test_envelope_accepts_bare_object_under_snapshots_key():
+    """The mistake the manual UI repeatedly made: {"snapshots": {obj}}."""
+    from app.schemas.analysis import AnalyseRiskRequest
+
+    req = AnalyseRiskRequest.model_validate({"snapshots": _bare_snapshot()})
+    assert len(req.snapshots) == 1
+    assert req.snapshots[0].mt5_login == 250030
+
+
+def test_envelope_still_rejects_unknown_top_level_key():
+    from app.schemas.analysis import AnalyseRiskRequest
+
+    with pytest.raises(ValidationError):
+        AnalyseRiskRequest.model_validate(
+            {"snapshots": [_bare_snapshot()], "totally_unknown_field": 1}
+        )

@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from .snapshot import AccountSnapshot, RiskLevel, TriggerType
 
@@ -19,10 +19,13 @@ from .snapshot import AccountSnapshot, RiskLevel, TriggerType
 class AnalyseRiskRequest(BaseModel):
     """Top-level request envelope.
 
-    Either:
-      * snapshots = [<one AccountSnapshot>, ...] (preferred), or
-      * a single AccountSnapshot at the root (handled at the route layer
-        before validation reaches this model).
+    The envelope accepts any of these shapes (auto-normalised before
+    validation), so manual curl tests and Alex's adapter both work
+    without fiddling:
+
+      * `{"snapshots": [ {...}, {...} ]}`   — canonical, list of snapshots
+      * `{"snapshots": {...}}`              — a single object, auto-wrapped
+      * `{"snapshot": {...}}`               — singular alias, auto-wrapped
 
     `include_history` overrides `settings.include_history_default` for
     this request. When False, no prior `RiskHistorySummary` is loaded
@@ -41,6 +44,26 @@ class AnalyseRiskRequest(BaseModel):
     snapshots: list[AccountSnapshot]
     include_history: bool | None = None
     enqueue_and_callback: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalise_snapshots(cls, data: Any) -> Any:
+        """Accept singular `snapshot` and bare-object `snapshots`.
+
+        Lifts both into the canonical `snapshots: [obj]` shape before
+        the strict per-field validation runs. Keeps `extra="forbid"`
+        useful for catching real typos.
+        """
+        if not isinstance(data, dict):
+            return data
+        # Singular alias: {"snapshot": {...}} → {"snapshots": [{...}]}
+        if "snapshot" in data and "snapshots" not in data:
+            data = {**data, "snapshots": [data["snapshot"]]}
+            data.pop("snapshot")
+        # Bare object under plural key: {"snapshots": {...}} → {"snapshots": [{...}]}
+        if isinstance(data.get("snapshots"), dict):
+            data = {**data, "snapshots": [data["snapshots"]]}
+        return data
 
 
 class EnqueuedJob(BaseModel):
