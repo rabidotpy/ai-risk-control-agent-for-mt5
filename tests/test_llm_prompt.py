@@ -14,11 +14,31 @@ def _snap() -> AccountSnapshot:
     return AccountSnapshot.model_validate(make_snapshot_payload())
 
 
-def test_payload_has_two_top_level_keys():
+def test_payload_has_three_top_level_keys():
     payload = build_user_payload(_snap(), prior_behavior_summary=None)
     obj = json.loads(payload)
-    assert set(obj.keys()) == {"current_window", "prior_behavior_summary"}
+    assert set(obj.keys()) == {
+        "current_window",
+        "rule_outcomes",
+        "prior_behavior_summary",
+    }
     assert obj["prior_behavior_summary"] is None
+    assert obj["rule_outcomes"] == []
+
+
+def test_payload_carries_rule_outcomes():
+    from app.rules.types import RuleOutcome
+
+    outcomes = [
+        RuleOutcome(rule="trade_count_in_window >= 30", observed_value=42, true=True, reason="42 trades"),
+    ]
+    payload = build_user_payload(
+        _snap(), prior_behavior_summary=None, rule_outcomes=outcomes
+    )
+    obj = json.loads(payload)
+    assert obj["rule_outcomes"] == [
+        {"rule": "trade_count_in_window >= 30", "observed_value": 42, "true": True, "reason": "42 trades"}
+    ]
 
 
 def test_payload_carries_prior_summary_verbatim():

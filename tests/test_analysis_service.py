@@ -11,7 +11,7 @@ from app.risks import ALL_RISKS, LATENCY_ARBITRAGE
 from app.schemas import AccountSnapshot
 from app.services import analyse_snapshots
 
-from .conftest import canned_response, make_snapshot_payload
+from .conftest import canned_response, make_short_trades, make_snapshot_payload
 
 
 def _seed_responses(evaluator, *, true_rules: dict[str, tuple[str, ...]] | None = None,
@@ -136,18 +136,17 @@ async def test_include_history_false_skips_prior_load_and_upsert(db, evaluator):
 
 
 @pytest.mark.asyncio
-async def test_score_computed_from_true_rule_count(db, evaluator):
-    # Force latency_arbitrage to fire 2/4 rules → 50.
-    _seed_responses(
-        evaluator,
-        true_rules={
-            LATENCY_ARBITRAGE.key: (
-                "trade_count_6h >= 30",
-                "median_holding_time_seconds <= 30",
-            )
-        },
+async def test_score_computed_from_python_rule_engine(db, evaluator):
+    """Score now comes from the Python rule engine, not the LLM's
+    canned `evaluations`. Build a snapshot that trips exactly 2/4
+    latency-arbitrage rules (R1 trade_count + R2 median_hold), but
+    leaves R3 (one-sided) and R4 (low win rate) failing → score 50.
+    """
+    _seed_responses(evaluator)
+    trades = make_short_trades(n=30, side="buy", profit=-1.0)  # one-sided + losing
+    snap = AccountSnapshot.model_validate(
+        make_snapshot_payload(trades=trades)
     )
-    snap = AccountSnapshot.model_validate(make_snapshot_payload())
     _, findings = await analyse_snapshots(
         snapshots=[snap], evaluator=evaluator, include_history=True
     )

@@ -1,19 +1,20 @@
-# Latency Arbitrage — Case 2: partial (R1 + R4 TRUE, R2/R3 FALSE)
+# Latency Arbitrage — Case 2: partial (R1 only — martingale grid false-positive)
 
-**Expected**: 2/4 sub-rules TRUE → `risk_score = 50`, `risk_level = watch`.
+**Expected**: 1/4 sub-rules TRUE → `risk_score = 25`, `risk_level = low`.
 
-| Sub-rule                                 | Expected | Why                                  |
-| ---------------------------------------- | -------- | ------------------------------------ |
-| `trade_count_6h >= 30`                   | TRUE     | 30 trades                            |
-| `median_holding_time_seconds <= 30`      | FALSE    | median ~120s                         |
-| `positive_slippage_ratio >= 0.5`         | FALSE    | buys filled at the ask, no edge      |
-| `short_holding_ratio_30s >= 0.6`         | TRUE     | majority closed within 30s anyway    |
+| Sub-rule                                       | Expected | Why                                           |
+| ---------------------------------------------- | -------- | --------------------------------------------- |
+| `trade_count_in_window >= 30`                  | TRUE     | 30+ trades                                    |
+| `median_holding_time_seconds <= 30`            | FALSE    | median ~35 minutes (grid holds for the move)  |
+| `minority_side_ratio >= 0.2`                   | FALSE    | one-sided (all shorts)                        |
+| `win_rate >= 0.9 AND batch_close_ratio <= 0.2` | FALSE    | wins ~80%, closes in batches (grid signature) |
 
-Many short trades, but slippage is neutral and the median creeps above
-30s because a quarter of trades are held 2-5 minutes. Looks like an
-active scalper, not latency arb.
+This is the account 250030 shape — a martingale grid on XAUUSD. The
+high trade count is the only thing it shares with latency arbitrage; R2,
+R3, R4 all reject the grid because it is one-sided, holds positions for
+minutes, and closes everything together.
 
-## Payload (representative trade — duplicate to 30, vary holding time)
+## Payload (representative trade — duplicate to ≥30, all `side: "sell"`)
 
 ```json
 {
@@ -22,20 +23,34 @@ active scalper, not latency arb.
       "mt5_login": 80102,
       "trigger_type": "manual_run",
       "start_time": "2026-05-08T00:00:00Z",
-      "end_time":   "2026-05-08T05:59:59Z",
+      "end_time": "2026-05-08T05:59:59Z",
       "trades": [
-        {"id": 1, "login": 80102, "group": "real\\A", "symbol": "GBPUSD", "volume": 0.5, "side": "buy",
-         "open_time": "2026-05-08T00:00:00Z", "time": "2026-05-08T00:00:25Z",
-         "open_price": 1.26000, "close_price": 1.26008,
-         "bid_at_open": 1.25998, "ask_at_open": 1.26000, "profit": 4.0}
+        {
+          "id": 1,
+          "login": 80102,
+          "group": "real\\A",
+          "symbol": "XAUUSD",
+          "volume": 0.5,
+          "side": "sell",
+          "open_time": "2026-05-08T00:00:00Z",
+          "time": "2026-05-08T00:35:00Z",
+          "open_price": 2300.0,
+          "close_price": 2299.4,
+          "bid_at_open": 2299.95,
+          "ask_at_open": 2300.05,
+          "profit": 30.0
+        }
       ],
-      "deposits": [], "withdraws": [], "bonus": [], "linked_accounts": []
+      "deposits": [],
+      "withdraws": [],
+      "bonus": [],
+      "linked_accounts": []
     }
   ],
   "include_history": false
 }
 ```
 
-> Construct 30 rows. Set 8 of them with `time` = open_time + 3min (so
-> the median crosses 30s but `short_holding_ratio_30s` stays > 0.6).
-> Keep `open_price == ask_at_open` on every row to suppress R3.
+> Construct ≥30 rows, all `side: "sell"`, holds ~35min each, and group
+> the close times into a few clusters (e.g. 12 trades closing at the
+> same `time`) so `batch_close_ratio` exceeds 0.2.

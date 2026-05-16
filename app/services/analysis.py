@@ -2,15 +2,20 @@
 
 For each (snapshot, risk):
   1. Load `prior_behavior_summary` from `RiskHistorySummary` (if include_history).
-  2. Build the user payload (`current_window` + `prior_behavior_summary`).
-  3. Call the LLM evaluator (one call per risk).
-  4. Compute deterministic score from the count of TRUE rules.
+  2. Run the deterministic rule engine — this decides per-rule TRUE/FALSE
+     and the score. It is the source of truth.
+  3. Build the user payload (current_window + rule_outcomes + prior_summary).
+  4. Call the LLM to obtain `summary` + `behavior_summary` only (and an
+     optional `notable_patterns` advisory). If it fails, the finding
+     still has the deterministic score; only the narrative becomes a
+     templated fallback string.
   5. Persist `RiskEvaluation` row (audit trail).
   6. Upsert `RiskHistorySummary.payload` with the AI's new behaviour summary
      (if include_history).
 
 A single failing risk does NOT lose the other risks for the same account:
-the per-risk loop catches and records a zero-score errored row instead.
+the per-risk loop catches and records a finding with the deterministic
+score and an error-marker analysis text instead.
 """
 
 from __future__ import annotations
@@ -23,6 +28,7 @@ from tortoise.transactions import in_transaction
 from ..llm import LLMEvaluator, build_user_payload
 from ..models import AnalysisRun, RiskEvaluation, RiskHistorySummary
 from ..risks import ALL_RISKS, Risk
+from ..rules import RuleOutcome
 from ..schemas import AccountSnapshot, RiskFinding
 from .prescreen import prescreen_snapshot
 from .scoring import compute_score, level_to_action, score_to_level
@@ -35,50 +41,39 @@ _COMPARISON_OPS = (" >= ", " <= ", " > ", " < ", " == ")
 
 
 def _metric_name(rule: str) -> str:
-    """Strip the comparison + threshold from a rule string.
-
-    'trade_count_6h >= 30' → 'trade_count_6h'
-    'repeated_lot_sl_tp_pattern_present' → 'repeated_lot_sl_tp_pattern_present'
-    """
+    """Strip the comparison + threshold from a rule string."""
     for op in _COMPARISON_OPS:
         if op in rule:
             return rule.split(op, 1)[0]
     return rule
 
 
-def _build_evidence(evaluations: list[Any], allowed_rules: tuple[str, ...]) -> dict[str, Any]:
+def _build_evidence(outcomes: list[RuleOutcome]) -> dict[str, Any]:
     """Surface observed_value per rule, keyed by metric name."""
     out: dict[str, Any] = {}
-    for ev in evaluations:
-        if not isinstance(ev, dict):
+    for o in outcomes:
+        if o.observed_value is None:
             continue
-        rule = ev.get("rule")
-        if not isinstance(rule, str) or rule not in allowed_rules:
-            continue
-        value = ev.get("observed_value")
-        if value is None:
-            continue
-        out[_metric_name(rule)] = value
+        out[_metric_name(o.rule)] = o.observed_value
     return out
 
 
-def _count_true_sub_rules(
-    evaluations: list[Any], allowed_rules: tuple[str, ...]
-) -> int:
-    """Count sub-rules the model marked true, deduped by exact rule text."""
+def _count_true_sub_rules(outcomes: list[RuleOutcome]) -> int:
+    """Count sub-rules the rule engine marked true, deduped by rule text."""
     seen: set[str] = set()
-    for ev in evaluations:
-        if not isinstance(ev, dict):
-            continue
-        rule = ev.get("rule")
-        if (
-            isinstance(rule, str)
-            and rule in allowed_rules
-            and ev.get("true")
-            and rule not in seen
-        ):
-            seen.add(rule)
+    for o in outcomes:
+        if o.true and o.rule not in seen:
+            seen.add(o.rule)
     return len(seen)
+
+
+def _fallback_summary(risk: Risk, outcomes: list[RuleOutcome]) -> str:
+    """Templated narrative used when the LLM call fails."""
+    fired = [o for o in outcomes if o.true]
+    if not fired:
+        return f"no {risk.name} rules fired in window"
+    parts = ", ".join(f"{o.rule} ({o.reason})" for o in fired)
+    return f"{risk.name}: {parts}"
 
 
 async def _load_prior_summary(
@@ -121,12 +116,7 @@ async def _upsert_summary(
 def _build_skipped_finding(
     *, risk: Risk, snapshot: AccountSnapshot
 ) -> RiskFinding:
-    """Synthetic zero-score finding for a risk that failed prescreen.
-
-    Lets the audit trail in /analyses stay complete without burning an
-    LLM call. The `evidence` payload tells anyone reading the row why
-    the LLM was skipped.
-    """
+    """Synthetic zero-score finding for a risk that failed prescreen."""
     return RiskFinding(
         mt5_login=snapshot.mt5_login,
         risk_type=risk.key,
@@ -147,12 +137,13 @@ async def _evaluate_one(
     evaluator: LLMEvaluator,
     include_history: bool,
 ) -> tuple[RiskFinding, dict[str, Any] | None]:
-    """Returns (finding, behavior_summary_payload | None).
+    """Returns (finding, behavior_summary_payload | None)."""
+    outcomes = list(risk.evaluator(snapshot))
+    num_true = _count_true_sub_rules(outcomes)
+    score = compute_score(risk.num_sub_rules, num_true)
+    level = score_to_level(score)
+    evidence = _build_evidence(outcomes)
 
-    `behavior_summary_payload` is the raw object the AI returned so the
-    caller can persist it. `None` means the AI did not return one (or the
-    evaluation errored).
-    """
     prior_obj = (
         await _load_prior_summary(mt5_login=snapshot.mt5_login, risk_key=risk.key)
         if include_history
@@ -160,38 +151,36 @@ async def _evaluate_one(
     )
     prior_payload = prior_obj.payload if prior_obj is not None else None
 
-    payload_json = build_user_payload(snapshot, prior_payload)
+    payload_json = build_user_payload(
+        snapshot, prior_payload, rule_outcomes=outcomes
+    )
+
+    summary_text = _fallback_summary(risk, outcomes)
+    behavior_summary: dict[str, Any] | None = None
+    notable_patterns: str | None = None
 
     try:
         tool_input = await evaluator.evaluate(risk, payload_json)
     except Exception as exc:  # noqa: BLE001 — contain per-risk failure
         logger.exception(
-            "risk evaluation failed for login=%s risk=%s",
+            "LLM narration failed for login=%s risk=%s (score still computed)",
             snapshot.mt5_login,
             risk.key,
         )
-        finding = RiskFinding(
-            mt5_login=snapshot.mt5_login,
-            risk_type=risk.key,
-            risk_score=0,
-            risk_level="low",
-            trigger_type=snapshot.trigger_type,
-            evidence={"error": f"{type(exc).__name__}: {exc}"},
-            suggested_action=level_to_action("low"),
-            analysis=f"error: evaluation failed ({type(exc).__name__})",
-            behavior_summary=None,
-        )
-        return finding, None
+        summary_text = f"{_fallback_summary(risk, outcomes)} [LLM narration unavailable: {type(exc).__name__}]"
+    else:
+        text = tool_input.get("summary")
+        if isinstance(text, str) and text.strip():
+            summary_text = text
+        bs = tool_input.get("behavior_summary")
+        if isinstance(bs, dict):
+            behavior_summary = bs
+        np_field = tool_input.get("notable_patterns")
+        if isinstance(np_field, str) and np_field.strip():
+            notable_patterns = np_field
 
-    evaluations = tool_input.get("evaluations") or []
-    summary_text = tool_input.get("summary") or ""
-    behavior_summary = tool_input.get("behavior_summary")
-    if not isinstance(behavior_summary, dict):
-        behavior_summary = None
-
-    num_true = _count_true_sub_rules(evaluations, risk.sub_rules)
-    score = compute_score(risk.num_sub_rules, num_true)
-    level = score_to_level(score)
+    if notable_patterns:
+        evidence = {**evidence, "notable_patterns": notable_patterns}
 
     finding = RiskFinding(
         mt5_login=snapshot.mt5_login,
@@ -199,7 +188,7 @@ async def _evaluate_one(
         risk_score=score,
         risk_level=level,
         trigger_type=snapshot.trigger_type,
-        evidence=_build_evidence(evaluations, risk.sub_rules),
+        evidence=evidence,
         suggested_action=level_to_action(level),
         analysis=summary_text,
         behavior_summary=behavior_summary,
@@ -215,13 +204,7 @@ async def analyse_snapshot(
     include_history: bool,
     risks: tuple[Risk, ...] = ALL_RISKS,
 ) -> list[RiskFinding]:
-    """Run every risk against one snapshot. Persist per-risk rows + upsert summaries.
-
-    Risks that fail the deterministic prescreen are persisted as
-    synthetic zero-score rows without an LLM call. Risks that pass go
-    through the full evaluator path. The behavior summary is only
-    upserted when the LLM actually ran.
-    """
+    """Run every risk against one snapshot. Persist per-risk rows + upsert summaries."""
     logger.info(
         "analyse_snapshot: login=%s window=%s..%s risks=%d",
         snapshot.mt5_login,
@@ -254,8 +237,6 @@ async def analyse_snapshot(
             )
         findings.append(finding)
 
-        # Persistence — one transaction per risk so a single risk failure
-        # doesn't roll back others' rows.
         async with in_transaction():
             await RiskEvaluation.create(
                 run=run,

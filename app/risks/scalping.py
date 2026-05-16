@@ -2,15 +2,11 @@
 
 from __future__ import annotations
 
+from ..rules import scalping as _eval
 from .base import Risk
 
 
-SUB_RULES = (
-    "trade_count_in_window >= 25",
-    "short_holding_ratio_60s >= 0.7",
-    "win_rate >= 0.75",
-    "repeated_lot_sl_tp_pattern_ratio >= 0.5",
-)
+SUB_RULES = _eval.SUB_RULES
 
 
 _RISK_PROMPT = """\
@@ -22,37 +18,22 @@ small per-trade profits, and a high win rate, often with a fixed pattern
 violation depends on the customer agreement; this evaluation flags the
 pattern only.
 
-Evaluate exactly these 4 rules. They are independent.
+The rule engine has already decided these 4 rules for this window. Use
+`rule_outcomes` to narrate; do not re-evaluate.
 
 R1: trade_count_in_window >= 25
-   count = len(current_window.trades).
-   TRUE iff count >= 25.
+   Total number of closed positions in the window.
 
 R2: short_holding_ratio_60s >= 0.7
-   For every trade in `current_window.trades` compute
-   holding_seconds = (close_time − open_time).total_seconds().
-   short_count = number of trades with holding_seconds <= 60.
-   ratio = short_count / len(current_window.trades).
-   TRUE iff ratio >= 0.7.
-   If `current_window.trades` is empty: FALSE + "insufficient_data: no trades in window".
+   Fraction of trades with holding_seconds <= 60.
 
 R3: win_rate >= 0.75
-   wins = number of trades in `current_window.trades` with profit > 0.
-   ratio = wins / len(current_window.trades).
-   TRUE iff ratio >= 0.75.
-   If fewer than 5 trades in `current_window.trades`: FALSE + \
-"insufficient_data: fewer than 5 trades — win rate not meaningful".
+   Fraction of trades with profit > 0. Needs at least 5 trades to be
+   meaningful.
 
 R4: repeated_lot_sl_tp_pattern_ratio >= 0.5
-   Bucket trades in `current_window.trades` by the triple
-   (volume, stop_loss, take_profit). When forming bucket keys, treat 0 and
-   null as the same value (both mean "unset") — most clients leave SL/TP at 0.
-   A "pattern bucket" is one shared by 3 or more trades.
-   pattern_count = number of trades belonging to a pattern bucket.
-   ratio = pattern_count / len(current_window.trades).
-   TRUE iff ratio >= 0.5.
-   If fewer than 3 trades in `current_window.trades`: FALSE + \
-"insufficient_data: fewer than 3 trades — pattern detection not meaningful".
+   Fraction of trades that share a (volume, stop_loss, take_profit)
+   bucket with 3+ other trades. Needs at least 3 trades.
 """
 
 
@@ -61,4 +42,5 @@ SCALPING = Risk(
     key="scalping",
     sub_rules=SUB_RULES,
     risk_prompt=_RISK_PROMPT,
+    evaluator=_eval.evaluate,
 )

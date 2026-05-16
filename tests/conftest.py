@@ -152,7 +152,12 @@ def canned_response(
     summary: str = "test summary",
     behavior_summary: dict | None = None,
 ) -> dict[str, Any]:
-    """Build a canned evaluator response that fires `true_rules`."""
+    """Build a canned evaluator response.
+
+    The `evaluations` echo field is kept so legacy fixtures keep
+    validating, but the production service ignores it — the Python rule
+    engine is the source of truth for `true` / score.
+    """
     return {
         "evaluations": [
             {
@@ -166,3 +171,78 @@ def canned_response(
         "summary": summary,
         "behavior_summary": behavior_summary or {"run_count": 1, "notes": "first run"},
     }
+
+
+# -- Trade builders -----------------------------------------------------------
+
+
+def make_trade(
+    *,
+    trade_id: int,
+    login: int = 70001,
+    symbol: str = "EURUSD",
+    side: str = "buy",
+    open_time: str = "2026-05-08T01:00:00Z",
+    close_time: str = "2026-05-08T01:00:10Z",
+    open_price: float = 1.1,
+    close_price: float = 1.1001,
+    bid_at_open: float = 1.0999,
+    ask_at_open: float = 1.1001,
+    volume: float = 0.1,
+    stop_loss: float = 0.0,
+    take_profit: float = 0.0,
+    swaps: float = 0.0,
+    commission: float = 0.0,
+    profit: float = 1.0,
+) -> dict[str, Any]:
+    return {
+        "id": trade_id,
+        "login": login,
+        "group": "real\\group-test",
+        "symbol": symbol,
+        "volume": volume,
+        "side": side,
+        "open_time": open_time,
+        "time": close_time,
+        "open_price": open_price,
+        "close_price": close_price,
+        "bid_at_open": bid_at_open,
+        "ask_at_open": ask_at_open,
+        "stop_loss": stop_loss,
+        "take_profit": take_profit,
+        "swaps": swaps,
+        "commission": commission,
+        "profit": profit,
+    }
+
+
+def make_short_trades(
+    n: int,
+    *,
+    start_id: int = 1000,
+    base_minute: int = 0,
+    hold_seconds: int = 10,
+    side: str = "buy",
+    profit: float = 1.0,
+) -> list[dict[str, Any]]:
+    """Make N short-hold trades, one per minute, scattered close times."""
+    trades = []
+    for i in range(n):
+        minute = base_minute + i
+        hh, mm = divmod(minute, 60)
+        open_time = f"2026-05-08T{1 + hh:02d}:{mm:02d}:00Z"
+        sec = hold_seconds % 60
+        extra_min = hold_seconds // 60
+        close_mm = (mm + extra_min) % 60
+        close_hh = 1 + hh + (mm + extra_min) // 60
+        close_time = f"2026-05-08T{close_hh:02d}:{close_mm:02d}:{sec:02d}Z"
+        trades.append(
+            make_trade(
+                trade_id=start_id + i,
+                side=side,
+                open_time=open_time,
+                close_time=close_time,
+                profit=profit,
+            )
+        )
+    return trades

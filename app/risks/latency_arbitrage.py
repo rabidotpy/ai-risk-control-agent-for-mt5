@@ -2,55 +2,42 @@
 
 from __future__ import annotations
 
+from ..rules import latency_arbitrage as _eval
 from .base import Risk
 
 
-SUB_RULES = (
-    "trade_count_6h >= 30",
-    "median_holding_time_seconds <= 30",
-    "positive_slippage_ratio >= 0.5",
-    "short_holding_ratio_30s >= 0.6",
-)
+SUB_RULES = _eval.SUB_RULES
 
 
 _RISK_PROMPT = """\
 RISK BEING EVALUATED: Latency Arbitrage
 
 Latency arbitrage means a trader profits by exploiting stale or delayed
-quotes. The fingerprint is: high frequency of trades, very short holding
-times, fills that beat the visible market quote at the moment of entry,
-and small but consistent profits taken seconds after entry.
+quotes. The fingerprint is: high frequency, very short holds, near-100%
+win rate, both buy and sell sides traded, and trades closed one at a
+time rather than in batches. A martingale grid looks superficially
+similar (many short positions, many wins) but is one-sided and closes
+in batches; the rules below are tuned to separate the two.
 
-The data window is whatever `current_window` covers (typically 6 hours);
-`current_window.trades` is the array of complete closed positions.
+The rule engine has already decided these 4 rules for this window. Use
+`rule_outcomes` to narrate; do not re-evaluate.
 
-Evaluate exactly these 4 rules. They are independent — score each on its
-own merits. Do not let your judgment of one rule influence another.
-
-R1: trade_count_6h >= 30
-   count = len(current_window.trades).
-   TRUE iff count >= 30.
+R1: trade_count_in_window >= 30
+   Total number of closed positions in the window.
 
 R2: median_holding_time_seconds <= 30
-   For every trade compute holding_seconds = (close_time − open_time).total_seconds().
-   median = median holding_seconds across all trades in the window.
-   TRUE iff median <= 30.
-   If `current_window.trades` is empty: FALSE + "insufficient_data: no trades in window".
+   Median of (close_time − open_time) across the window's trades.
 
-R3: positive_slippage_ratio >= 0.5
-   "Filled in trader's favour" at the open means:
-     * side == "buy"  AND open_price < ask_at_open, OR
-     * side == "sell" AND open_price > bid_at_open.
-   favourable_count = number of trades filled in trader's favour.
-   ratio = favourable_count / len(current_window.trades).
-   TRUE iff ratio >= 0.5.
-   If `current_window.trades` is empty: FALSE + "insufficient_data: no trades in window".
+R3: minority_side_ratio >= 0.2
+   min(buy_count, sell_count) / total_trades. A real latency-arb account
+   trades both sides; a one-sided grid will score near 0.
 
-R4: short_holding_ratio_30s >= 0.6
-   short_count = number of trades with holding_seconds <= 30.
-   ratio = short_count / len(current_window.trades).
-   TRUE iff ratio >= 0.6.
-   If `current_window.trades` is empty: FALSE + "insufficient_data: no trades in window".
+R4: win_rate >= 0.9 AND batch_close_ratio <= 0.2
+   Composite: win_rate is wins / total; batch_close_ratio is the fraction
+   of trades whose close_time second is shared by 3+ other trades. A real
+   latency-arb account wins almost everything AND closes trades one at a
+   time. A grid wins often but closes in batches (high batch ratio), so
+   it fails this composite.
 """
 
 
@@ -59,4 +46,5 @@ LATENCY_ARBITRAGE = Risk(
     key="latency_arbitrage",
     sub_rules=SUB_RULES,
     risk_prompt=_RISK_PROMPT,
+    evaluator=_eval.evaluate,
 )
