@@ -165,3 +165,62 @@ async def test_run_record_is_created(db, evaluator):
     runs = await AnalysisRun.all()
     assert len(runs) == 1
     assert runs[0].snapshot_count == 2
+
+
+@pytest.mark.asyncio
+async def test_llm_narration_skipped_below_threshold(db, evaluator, monkeypatch):
+    """Low-score risks must not invoke the LLM. The deterministic score
+    still lands in the finding; the narrative is a templated fallback.
+    """
+    from app.config import settings as app_settings
+    monkeypatch.setattr(app_settings, "llm_narrate_min_score", 60)
+    _seed_responses(evaluator)  # canned responses exist but should not be used
+
+    # Empty snapshot → every risk scores 0 (well below 60).
+    snap = AccountSnapshot.model_validate(make_snapshot_payload())
+    _, findings = await analyse_snapshots(
+        snapshots=[snap], evaluator=evaluator, include_history=True
+    )
+
+    # All four risks return findings, all with scores < threshold.
+    assert len(findings) == len(ALL_RISKS)
+    assert all(f.risk_score < 60 for f in findings)
+    # LLM was never invoked.
+    assert evaluator.calls == []
+    # The fallback narrative is a non-empty templated string (no LLM text).
+    for f in findings:
+        assert isinstance(f.analysis, str) and f.analysis
+        # No LLM-derived behavior_summary was produced.
+        assert f.behavior_summary is None
+
+
+@pytest.mark.asyncio
+async def test_llm_narration_runs_at_or_above_threshold(db, evaluator, monkeypatch):
+    """At the threshold or above, the LLM is called and its narrative wins
+    over the templated fallback.
+    """
+    from app.config import settings as app_settings
+    from .conftest import make_short_trades
+    monkeypatch.setattr(app_settings, "llm_narrate_min_score", 60)
+    _seed_responses(
+        evaluator,
+        behavior={LATENCY_ARBITRAGE.key: {"run_count": 1, "marker": "from-llm"}},
+    )
+
+    # 30 short bidirectional all-winning scattered trades → latency arb = 4/4 = 100.
+    trades = make_short_trades(n=30, side="buy", profit=1.0)
+    for i in range(0, 30, 2):
+        trades[i]["side"] = "sell"
+    snap = AccountSnapshot.model_validate(make_snapshot_payload(trades=trades))
+
+    _, findings = await analyse_snapshots(
+        snapshots=[snap], evaluator=evaluator, include_history=True
+    )
+
+    la = next(f for f in findings if f.risk_type == LATENCY_ARBITRAGE.key)
+    assert la.risk_score == 100
+    # LLM was called for latency arb (it crossed threshold). At least one
+    # call with that risk_key.
+    assert any(rk == LATENCY_ARBITRAGE.key for rk, _ in evaluator.calls)
+    # The behavior_summary came from the canned LLM response.
+    assert la.behavior_summary == {"run_count": 1, "marker": "from-llm"}

@@ -67,11 +67,13 @@ async def db():
 @pytest.fixture(autouse=True)
 def _disable_filters_by_default(monkeypatch):
     """Existing tests assume every (snapshot × risk) reaches the LLM and
-    every finding is forwarded. Tests that exercise the prescreen or the
-    high-risk filter override these via their own monkeypatch.
+    every finding is forwarded. Tests that exercise the prescreen, the
+    high-risk filter, or the LLM-narration gate override these via their
+    own monkeypatch.
     """
     monkeypatch.setattr(settings, "prescreen_enabled", False)
     monkeypatch.setattr(settings, "callback_min_score", 0)
+    monkeypatch.setattr(settings, "llm_narrate_min_score", 0)
 
 
 @pytest.fixture

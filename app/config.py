@@ -65,5 +65,14 @@ class Settings(BaseSettings):
     # complete. Disable to force every risk through the LLM.
     prescreen_enabled: bool = True
 
+    # Post-rule LLM gate ---------------------------------------------------
+    # After the Python rule engine produces a deterministic score, the LLM
+    # is called to write a narrative ONLY if the score reaches this
+    # threshold. Below this, a templated one-line summary is used instead.
+    # Saves Anthropic spend on the long tail of low-risk accounts and
+    # matches the same cut-off used by callback_min_score so the system
+    # behaves consistently: low scores stay silent end-to-end.
+    llm_narrate_min_score: int = 60
+
 
 settings = Settings()

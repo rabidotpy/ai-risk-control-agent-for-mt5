@@ -25,6 +25,7 @@ from typing import Any
 
 from tortoise.transactions import in_transaction
 
+from ..config import settings
 from ..llm import LLMEvaluator, build_user_payload
 from ..models import AnalysisRun, RiskEvaluation, RiskHistorySummary
 from ..risks import ALL_RISKS, Risk
@@ -151,33 +152,47 @@ async def _evaluate_one(
     )
     prior_payload = prior_obj.payload if prior_obj is not None else None
 
-    payload_json = build_user_payload(
-        snapshot, prior_payload, rule_outcomes=outcomes
-    )
-
     summary_text = _fallback_summary(risk, outcomes)
     behavior_summary: dict[str, Any] | None = None
     notable_patterns: str | None = None
 
-    try:
-        tool_input = await evaluator.evaluate(risk, payload_json)
-    except Exception as exc:  # noqa: BLE001 — contain per-risk failure
-        logger.exception(
-            "LLM narration failed for login=%s risk=%s (score still computed)",
+    # Gate the LLM narration on the deterministic score. Low-scoring risks
+    # get a templated one-line summary; the rule engine has already produced
+    # the verdict that matters for the audit trail and the outbound filter.
+    if score < settings.llm_narrate_min_score:
+        logger.debug(
+            "LLM narration skipped login=%s risk=%s score=%d < %d",
             snapshot.mt5_login,
             risk.key,
+            score,
+            settings.llm_narrate_min_score,
         )
-        summary_text = f"{_fallback_summary(risk, outcomes)} [LLM narration unavailable: {type(exc).__name__}]"
     else:
-        text = tool_input.get("summary")
-        if isinstance(text, str) and text.strip():
-            summary_text = text
-        bs = tool_input.get("behavior_summary")
-        if isinstance(bs, dict):
-            behavior_summary = bs
-        np_field = tool_input.get("notable_patterns")
-        if isinstance(np_field, str) and np_field.strip():
-            notable_patterns = np_field
+        payload_json = build_user_payload(
+            snapshot, prior_payload, rule_outcomes=outcomes
+        )
+        try:
+            tool_input = await evaluator.evaluate(risk, payload_json)
+        except Exception as exc:  # noqa: BLE001 — contain per-risk failure
+            logger.exception(
+                "LLM narration failed for login=%s risk=%s (score still computed)",
+                snapshot.mt5_login,
+                risk.key,
+            )
+            summary_text = (
+                f"{_fallback_summary(risk, outcomes)} "
+                f"[LLM narration unavailable: {type(exc).__name__}]"
+            )
+        else:
+            text = tool_input.get("summary")
+            if isinstance(text, str) and text.strip():
+                summary_text = text
+            bs = tool_input.get("behavior_summary")
+            if isinstance(bs, dict):
+                behavior_summary = bs
+            np_field = tool_input.get("notable_patterns")
+            if isinstance(np_field, str) and np_field.strip():
+                notable_patterns = np_field
 
     if notable_patterns:
         evidence = {**evidence, "notable_patterns": notable_patterns}
