@@ -59,6 +59,12 @@ class RiskEvaluation(Model):
     risk_level = fields.CharField(max_length=16)
     trigger_type = fields.CharField(max_length=64)
     evidence = fields.JSONField()
+    # Per-rule human-readable lines, one per sub-rule, formatted as
+    # "<rule> -> FIRED | not fired (<reason>)". Lets a downstream consumer
+    # (Telegram bot, dashboard) show the per-rule verdict without having to
+    # decode the rule strings themselves. Nullable so existing rows stay
+    # valid; new rows always populate (empty list for prescreen-skipped).
+    evidence_description_list = fields.JSONField(null=True)
     suggested_action = fields.CharField(max_length=128)
     analysis = fields.TextField()
     behavior_summary = fields.JSONField(null=True)

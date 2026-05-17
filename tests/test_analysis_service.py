@@ -195,6 +195,54 @@ async def test_llm_narration_skipped_below_threshold(db, evaluator, monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_evidence_description_list_populated_for_rule_runs(db, evaluator):
+    """Each sub-rule outcome contributes one human-readable line, in order."""
+    from .conftest import make_short_trades
+
+    _seed_responses(evaluator)
+    # 30 short bidirectional all-winning scattered trades → all 4 latency rules trip.
+    trades = make_short_trades(n=30, side="buy", profit=1.0)
+    for i in range(0, 30, 2):
+        trades[i]["side"] = "sell"
+    snap = AccountSnapshot.model_validate(make_snapshot_payload(trades=trades))
+
+    _, findings = await analyse_snapshots(
+        snapshots=[snap], evaluator=evaluator, include_history=True
+    )
+    la = next(f for f in findings if f.risk_type == LATENCY_ARBITRAGE.key)
+
+    # Exactly one description per sub-rule, all marked FIRED, all carry a reason.
+    assert len(la.evidence_description_list) == LATENCY_ARBITRAGE.num_sub_rules
+    for line in la.evidence_description_list:
+        assert "->" in line
+        assert "FIRED" in line  # all four fired on this fixture
+        assert "(" in line and ")" in line  # reason in parentheses
+
+
+@pytest.mark.asyncio
+async def test_evidence_description_list_for_prescreen_skipped_risks(
+    db, evaluator, monkeypatch
+):
+    """Prescreen-skipped risks still produce a single explanatory line."""
+    from app.config import settings as app_settings
+    monkeypatch.setattr(app_settings, "prescreen_enabled", True)
+    _seed_responses(evaluator)
+
+    # Empty snapshot → swap and bonus get prescreen-skipped.
+    snap = AccountSnapshot.model_validate(make_snapshot_payload())
+    _, findings = await analyse_snapshots(
+        snapshots=[snap], evaluator=evaluator, include_history=False
+    )
+    # Pick the prescreen-skipped risks; their evidence carries the prescreen marker.
+    skipped = [f for f in findings if "prescreen" in f.evidence]
+    assert skipped, "expected at least one prescreen-skipped risk on empty snapshot"
+    for f in skipped:
+        assert len(f.evidence_description_list) == 1
+        assert "prescreen" in f.evidence_description_list[0]
+        assert "skipped" in f.evidence_description_list[0]
+
+
+@pytest.mark.asyncio
 async def test_llm_narration_runs_at_or_above_threshold(db, evaluator, monkeypatch):
     """At the threshold or above, the LLM is called and its narrative wins
     over the templated fallback.

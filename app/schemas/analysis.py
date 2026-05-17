@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .snapshot import AccountSnapshot, RiskLevel, TriggerType
 
@@ -102,6 +102,11 @@ class RiskFinding(BaseModel):
     risk_level: RiskLevel
     trigger_type: TriggerType
     evidence: dict[str, Any]
+    # One human-readable line per sub-rule:
+    #   "<rule> -> FIRED (<reason>)"
+    #   "<rule> -> not fired (<reason>)"
+    # Empty when the risk was prescreen-skipped (no Python rules ran).
+    evidence_description_list: list[str] = Field(default_factory=list)
     suggested_action: str
     analysis: str
     behavior_summary: dict[str, Any] | None = None

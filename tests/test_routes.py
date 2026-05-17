@@ -120,6 +120,11 @@ async def test_get_analyses_returns_persisted_evaluations(client, evaluator):
     rows = resp.json()
     assert len(rows) == len(ALL_RISKS)
     assert {r["risk_type"] for r in rows} == {r.key for r in ALL_RISKS}
+    # Every persisted row carries the per-rule description list (list-typed,
+    # even if empty for some skipped-prescreen cases).
+    for r in rows:
+        assert "evidence_description_list" in r
+        assert isinstance(r["evidence_description_list"], list)
 
 
 @pytest.mark.asyncio

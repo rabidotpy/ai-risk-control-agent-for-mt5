@@ -68,6 +68,19 @@ def _count_true_sub_rules(outcomes: list[RuleOutcome]) -> int:
     return len(seen)
 
 
+def _build_evidence_descriptions(outcomes: list[RuleOutcome]) -> list[str]:
+    """One human-readable line per sub-rule.
+
+    Format: "<rule> -> FIRED (<reason>)" or "<rule> -> not fired (<reason>)".
+    Downstream consumers (Telegram bot, dashboards) can render the per-rule
+    verdict without decoding rule strings themselves.
+    """
+    return [
+        f"{o.rule} -> {'FIRED' if o.true else 'not fired'} ({o.reason})"
+        for o in outcomes
+    ]
+
+
 def _fallback_summary(risk: Risk, outcomes: list[RuleOutcome]) -> str:
     """Templated narrative used when the LLM call fails."""
     fired = [o for o in outcomes if o.true]
@@ -125,6 +138,9 @@ def _build_skipped_finding(
         risk_level="low",
         trigger_type=snapshot.trigger_type,
         evidence={"prescreen": "skipped: no rule could plausibly trip"},
+        evidence_description_list=[
+            "prescreen -> skipped (no rule could plausibly trip on this snapshot)"
+        ],
         suggested_action=level_to_action("low"),
         analysis="prescreen: skipped LLM evaluation (no rule could trip)",
         behavior_summary=None,
@@ -144,6 +160,7 @@ async def _evaluate_one(
     score = compute_score(risk.num_sub_rules, num_true)
     level = score_to_level(score)
     evidence = _build_evidence(outcomes)
+    evidence_description_list = _build_evidence_descriptions(outcomes)
 
     prior_obj = (
         await _load_prior_summary(mt5_login=snapshot.mt5_login, risk_key=risk.key)
@@ -204,6 +221,7 @@ async def _evaluate_one(
         risk_level=level,
         trigger_type=snapshot.trigger_type,
         evidence=evidence,
+        evidence_description_list=evidence_description_list,
         suggested_action=level_to_action(level),
         analysis=summary_text,
         behavior_summary=behavior_summary,
@@ -261,6 +279,7 @@ async def analyse_snapshot(
                 risk_level=finding.risk_level,
                 trigger_type=snapshot.trigger_type,
                 evidence=finding.evidence,
+                evidence_description_list=finding.evidence_description_list,
                 suggested_action=finding.suggested_action,
                 analysis=finding.analysis,
                 behavior_summary=ai_summary,

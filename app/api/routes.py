@@ -194,6 +194,7 @@ async def get_analyses(
             "risk_level": r.risk_level,
             "trigger_type": r.trigger_type,
             "evidence": r.evidence,
+            "evidence_description_list": r.evidence_description_list or [],
             "suggested_action": r.suggested_action,
             "analysis": r.analysis,
             "behavior_summary": r.behavior_summary,
