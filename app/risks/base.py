@@ -128,9 +128,69 @@ OUTPUT
       run_count, last_seen_at, recurring_findings, severity_trend,
       notable_patterns, notes
   When prior_behavior_summary is null, initialise from scratch.
+- `evidence_description_list` — REQUIRED. See section below.
 - `notable_patterns` — OPTIONAL free-text string. Use it only if the
-  snapshot shows a pattern the listed rules do not capture. Leave it
+  snapshot shows a pattern the listed rules do not cover. Leave it
   out or empty otherwise.
+
+EVIDENCE DESCRIPTION LIST
+This is the field a non-technical broker risk officer will actually
+read on their phone when an alert lands. They are NOT a developer and
+NOT a quant. They know how an MT5 account behaves, but they do not
+read code, do not know what `swap_profit_ratio` means, and do not want
+to look at JSON. Your job is to translate the rule_outcomes into
+plain business English they can act on in 30 seconds.
+
+Produce exactly FOUR items, in this order, each prefixed with the
+bracket label shown:
+
+  1. "[WHAT] ..." — What happened in plain words. Use the actual
+     symbol, lot size, direction, and counts from the snapshot. For
+     example: "Account 250030 opened 39 sell positions on gold
+     (XAUUSD), all at 0.01 lots, between 8:16 PM and 9:55 PM UTC on
+     May 14." No jargon, no field names.
+
+  2. "[WHY] ..." — Why the system reached this verdict. Name the rules
+     that fired in everyday words and explain in one or two sentences
+     what they mean. If only some rules fired (or none), be explicit
+     that the system did NOT confirm the risk and explain which checks
+     failed. For example: "Only one of the four latency-arbitrage
+     checks fired (trade count). The other three checks for short
+     holding time, mixed direction, and scattered exits all failed,
+     so the system correctly judged this as low risk for latency
+     arbitrage."
+
+  3. "[HOW] ..." — How the pattern was executed, described mechanically
+     so the officer recognises the trading style. Translate cross-trade
+     signals into images: "trades opened in rapid bursts then closed
+     all together at the same second", "positions added at worse and
+     worse prices, then closed in one click when price ticked back",
+     "held positions through midnight UTC to collect overnight
+     interest". Mention any signals that distinguish this from real
+     abuse if relevant. Two to four sentences.
+
+  4. "[WHEN] ..." — When in the window the activity happened. Use
+     clock times in plain language, total duration, and any
+     clustering. For example: "All activity took place in a tight 100
+     minute window starting at 8:16 PM UTC. Most positions were
+     opened in the first 30 minutes and closed in three big batches:
+     12 at 9:01:29 PM, 7 at 9:04:21 PM, and 10 at 9:41:16 PM." Use UTC
+     times from the window.
+
+STYLE RULES for evidence_description_list
+- Each item is one short paragraph (1 to 4 sentences).
+- Plain English only. No code snippets. No field names like
+  `swap_profit_ratio`, `bid_at_open`, `R3`. No symbols like `>=`,
+  `<=`, `>`, `<`. Translate everything into words.
+- Always cite the concrete observed values from `rule_outcomes` so the
+  officer can verify against the raw data later. Numbers like
+  percentages and counts are fine; just write them as numbers.
+- Always lead with the bracket label exactly as shown: "[WHAT] ",
+  "[WHY] ", "[HOW] ", "[WHEN] ". No other prefix.
+- Do NOT contradict rule_outcomes. If a rule did NOT fire, do not
+  claim the pattern was present.
+- Do NOT include a numeric score, do NOT propose a level, do NOT
+  recommend an action. The system handles those separately.
 """
 
 
@@ -142,10 +202,11 @@ OUTPUT
 REPORT_EVALUATION_TOOL: dict = {
     "name": "report_evaluation",
     "description": (
-        "Report the narrative summary and rolling behaviour_summary for "
-        "the risk type being assessed. The rule outcomes are decided by "
-        "the rule engine before this call — do not recompute them. Must "
-        "be called exactly once."
+        "Report the narrative summary, rolling behaviour_summary, and "
+        "plain-English evidence_description_list for the risk type "
+        "being assessed. The rule outcomes are decided by the rule "
+        "engine before this call — do not recompute them. Must be "
+        "called exactly once."
     ),
     "input_schema": {
         "type": "object",
@@ -165,6 +226,20 @@ REPORT_EVALUATION_TOOL: dict = {
                     "Folds this run into prior_behavior_summary. Compact "
                     "JSON; never raw event data."
                 ),
+            },
+            "evidence_description_list": {
+                "type": "array",
+                "description": (
+                    "Exactly 4 plain-English strings for a non-technical "
+                    "broker risk officer. Each item starts with a bracket "
+                    "label and covers one angle, in this order: [WHAT], "
+                    "[WHY], [HOW], [WHEN]. No field names, no operators, "
+                    "no score, no action. See the EVIDENCE DESCRIPTION "
+                    "LIST section of the system prompt for the full spec."
+                ),
+                "minItems": 4,
+                "maxItems": 4,
+                "items": {"type": "string"},
             },
             "notable_patterns": {
                 "type": "string",
@@ -192,7 +267,7 @@ REPORT_EVALUATION_TOOL: dict = {
                 },
             },
         },
-        "required": ["summary", "behavior_summary"],
+        "required": ["summary", "behavior_summary", "evidence_description_list"],
     },
 }
 

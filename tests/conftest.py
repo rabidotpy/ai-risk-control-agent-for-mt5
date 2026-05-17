@@ -153,6 +153,7 @@ def canned_response(
     true_rules: tuple[str, ...] = (),
     summary: str = "test summary",
     behavior_summary: dict | None = None,
+    evidence_description_list: list[str] | None = None,
 ) -> dict[str, Any]:
     """Build a canned evaluator response.
 
@@ -172,6 +173,12 @@ def canned_response(
         ],
         "summary": summary,
         "behavior_summary": behavior_summary or {"run_count": 1, "notes": "first run"},
+        "evidence_description_list": evidence_description_list or [
+            "[WHAT] Canned: account had test activity in the test window.",
+            "[WHY] Canned: test description of which rules fired and why.",
+            "[HOW] Canned: test description of the trading mechanism.",
+            "[WHEN] Canned: test description of the timing.",
+        ],
     }
 
 

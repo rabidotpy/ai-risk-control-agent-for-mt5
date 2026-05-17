@@ -195,12 +195,29 @@ async def test_llm_narration_skipped_below_threshold(db, evaluator, monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_evidence_description_list_populated_for_rule_runs(db, evaluator):
-    """Each sub-rule outcome contributes one human-readable line, in order."""
-    from .conftest import make_short_trades
+async def test_evidence_description_list_comes_from_llm(db, evaluator):
+    """When the LLM is called, its evidence_description_list is what we
+    surface, verbatim. The Python service does not synthesise it."""
+    from .conftest import canned_response, make_short_trades
 
-    _seed_responses(evaluator)
-    # 30 short bidirectional all-winning scattered trades → all 4 latency rules trip.
+    custom_lines = [
+        "[WHAT] custom test what line",
+        "[WHY] custom test why line",
+        "[HOW] custom test how line",
+        "[WHEN] custom test when line",
+    ]
+    # Seed only latency_arb with our custom list; the others use defaults.
+    for risk in ALL_RISKS:
+        if risk.key == LATENCY_ARBITRAGE.key:
+            evaluator.responses[risk.key] = canned_response(
+                sub_rules=risk.sub_rules,
+                true_rules=risk.sub_rules,
+                evidence_description_list=custom_lines,
+            )
+        else:
+            evaluator.responses[risk.key] = canned_response(sub_rules=risk.sub_rules)
+
+    # Trip all 4 latency rules so the LLM is actually invoked.
     trades = make_short_trades(n=30, side="buy", profit=1.0)
     for i in range(0, 30, 2):
         trades[i]["side"] = "sell"
@@ -210,36 +227,43 @@ async def test_evidence_description_list_populated_for_rule_runs(db, evaluator):
         snapshots=[snap], evaluator=evaluator, include_history=True
     )
     la = next(f for f in findings if f.risk_type == LATENCY_ARBITRAGE.key)
-
-    # Exactly one description per sub-rule, all marked FIRED, all carry a reason.
-    assert len(la.evidence_description_list) == LATENCY_ARBITRAGE.num_sub_rules
-    for line in la.evidence_description_list:
-        assert "->" in line
-        assert "FIRED" in line  # all four fired on this fixture
-        assert "(" in line and ")" in line  # reason in parentheses
+    assert la.evidence_description_list == custom_lines
 
 
 @pytest.mark.asyncio
-async def test_evidence_description_list_for_prescreen_skipped_risks(
+async def test_evidence_description_list_empty_when_llm_skipped(
     db, evaluator, monkeypatch
 ):
-    """Prescreen-skipped risks still produce a single explanatory line."""
+    """Below the LLM threshold, no narration runs and the list stays []."""
+    from app.config import settings as app_settings
+    monkeypatch.setattr(app_settings, "llm_narrate_min_score", 60)
+    _seed_responses(evaluator)
+
+    # Empty snapshot → all risks score 0, well below threshold.
+    snap = AccountSnapshot.model_validate(make_snapshot_payload())
+    _, findings = await analyse_snapshots(
+        snapshots=[snap], evaluator=evaluator, include_history=True
+    )
+    assert all(f.evidence_description_list == [] for f in findings)
+
+
+@pytest.mark.asyncio
+async def test_evidence_description_list_empty_when_prescreen_skipped(
+    db, evaluator, monkeypatch
+):
+    """Prescreen-skipped risks return an empty list (no LLM ran)."""
     from app.config import settings as app_settings
     monkeypatch.setattr(app_settings, "prescreen_enabled", True)
     _seed_responses(evaluator)
 
-    # Empty snapshot → swap and bonus get prescreen-skipped.
     snap = AccountSnapshot.model_validate(make_snapshot_payload())
     _, findings = await analyse_snapshots(
         snapshots=[snap], evaluator=evaluator, include_history=False
     )
-    # Pick the prescreen-skipped risks; their evidence carries the prescreen marker.
     skipped = [f for f in findings if "prescreen" in f.evidence]
     assert skipped, "expected at least one prescreen-skipped risk on empty snapshot"
     for f in skipped:
-        assert len(f.evidence_description_list) == 1
-        assert "prescreen" in f.evidence_description_list[0]
-        assert "skipped" in f.evidence_description_list[0]
+        assert f.evidence_description_list == []
 
 
 @pytest.mark.asyncio

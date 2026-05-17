@@ -68,19 +68,6 @@ def _count_true_sub_rules(outcomes: list[RuleOutcome]) -> int:
     return len(seen)
 
 
-def _build_evidence_descriptions(outcomes: list[RuleOutcome]) -> list[str]:
-    """One human-readable line per sub-rule.
-
-    Format: "<rule> -> FIRED (<reason>)" or "<rule> -> not fired (<reason>)".
-    Downstream consumers (Telegram bot, dashboards) can render the per-rule
-    verdict without decoding rule strings themselves.
-    """
-    return [
-        f"{o.rule} -> {'FIRED' if o.true else 'not fired'} ({o.reason})"
-        for o in outcomes
-    ]
-
-
 def _fallback_summary(risk: Risk, outcomes: list[RuleOutcome]) -> str:
     """Templated narrative used when the LLM call fails."""
     fired = [o for o in outcomes if o.true]
@@ -138,9 +125,10 @@ def _build_skipped_finding(
         risk_level="low",
         trigger_type=snapshot.trigger_type,
         evidence={"prescreen": "skipped: no rule could plausibly trip"},
-        evidence_description_list=[
-            "prescreen -> skipped (no rule could plausibly trip on this snapshot)"
-        ],
+        # No LLM ran for prescreen-skipped risks, so the plain-English
+        # description list stays empty. The technical `evidence` dict
+        # above carries the only signal needed for the audit trail.
+        evidence_description_list=[],
         suggested_action=level_to_action("low"),
         analysis="prescreen: skipped LLM evaluation (no rule could trip)",
         behavior_summary=None,
@@ -160,7 +148,6 @@ async def _evaluate_one(
     score = compute_score(risk.num_sub_rules, num_true)
     level = score_to_level(score)
     evidence = _build_evidence(outcomes)
-    evidence_description_list = _build_evidence_descriptions(outcomes)
 
     prior_obj = (
         await _load_prior_summary(mt5_login=snapshot.mt5_login, risk_key=risk.key)
@@ -172,6 +159,10 @@ async def _evaluate_one(
     summary_text = _fallback_summary(risk, outcomes)
     behavior_summary: dict[str, Any] | None = None
     notable_patterns: str | None = None
+    # The plain-English description list is produced by the LLM in the
+    # narrate step. Empty when the LLM is skipped (low score) or fails;
+    # downstream consumers fall back to the structured `evidence` dict.
+    evidence_description_list: list[str] = []
 
     # Gate the LLM narration on the deterministic score. Low-scoring risks
     # get a templated one-line summary; the rule engine has already produced
@@ -210,6 +201,15 @@ async def _evaluate_one(
             np_field = tool_input.get("notable_patterns")
             if isinstance(np_field, str) and np_field.strip():
                 notable_patterns = np_field
+            edl = tool_input.get("evidence_description_list")
+            if isinstance(edl, list):
+                # Keep only non-empty strings, trim whitespace. Tolerate
+                # the LLM returning fewer/more than 4 items instead of
+                # failing the whole call.
+                evidence_description_list = [
+                    s.strip() for s in edl
+                    if isinstance(s, str) and s.strip()
+                ]
 
     if notable_patterns:
         evidence = {**evidence, "notable_patterns": notable_patterns}
