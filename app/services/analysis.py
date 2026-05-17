@@ -1,21 +1,27 @@
 """Analysis orchestrator.
 
 For each (snapshot, risk):
-  1. Load `prior_behavior_summary` from `RiskHistorySummary` (if include_history).
-  2. Run the deterministic rule engine — this decides per-rule TRUE/FALSE
-     and the score. It is the source of truth.
-  3. Build the user payload (current_window + rule_outcomes + prior_summary).
-  4. Call the LLM to obtain `summary` + `behavior_summary` only (and an
-     optional `notable_patterns` advisory). If it fails, the finding
-     still has the deterministic score; only the narrative becomes a
-     templated fallback string.
-  5. Persist `RiskEvaluation` row (audit trail).
-  6. Upsert `RiskHistorySummary.payload` with the AI's new behaviour summary
-     (if include_history).
+  1. Run the deterministic prescreen. If it skips this risk, persist a
+     synthetic zero-score finding and stop.
+  2. Run the deterministic rule engine. This decides per-rule TRUE/FALSE
+     and the score; it is the source of truth for the verdict.
+  3. If the score is below `settings.llm_narrate_min_score`, skip the
+     LLM call. The finding still carries the deterministic score and a
+     templated `analysis`; `evidence_description_list` stays `[]`.
+  4. Otherwise call the LLM with (snapshot + rule_outcomes + prior
+     behaviour summary). Parse `summary`, `behavior_summary`, optional
+     `notable_patterns`, and the 4-item `evidence_description_list`
+     (the plain-English [WHAT]/[WHY]/[HOW]/[WHEN] block for the risk
+     officer). If the LLM raises, the finding still has the
+     deterministic score; only the narrative degrades.
+  5. Persist a `RiskEvaluation` row (audit trail).
+  6. If we have history enabled and the LLM produced a behaviour
+     summary, upsert `RiskHistorySummary.payload` so the next run sees
+     prior context.
 
-A single failing risk does NOT lose the other risks for the same account:
-the per-risk loop catches and records a finding with the deterministic
-score and an error-marker analysis text instead.
+A single failing risk does NOT lose the other risks for the same
+account: the per-risk loop catches and records a finding with the
+deterministic score and an error-marker `analysis` instead.
 """
 
 from __future__ import annotations
@@ -210,6 +216,16 @@ async def _evaluate_one(
                     s.strip() for s in edl
                     if isinstance(s, str) and s.strip()
                 ]
+            # Operational red flag: the LLM was called (score crossed the
+            # narrate threshold) but produced no usable description list.
+            # Most likely cause is a stale Anthropic prompt cache or an
+            # outdated deployment that does not include the new tool schema.
+            if not evidence_description_list:
+                logger.warning(
+                    "LLM returned empty evidence_description_list "
+                    "login=%s risk=%s score=%d (check tool schema / cache)",
+                    snapshot.mt5_login, risk.key, score,
+                )
 
     if notable_patterns:
         evidence = {**evidence, "notable_patterns": notable_patterns}

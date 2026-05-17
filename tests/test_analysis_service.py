@@ -248,6 +248,72 @@ async def test_evidence_description_list_empty_when_llm_skipped(
 
 
 @pytest.mark.asyncio
+async def test_evidence_description_list_filters_malformed_items(db):
+    """If the LLM returns a list with non-strings or empty strings, those
+    are silently dropped; surviving strings are kept."""
+    from app.services import analyse_snapshot
+    from .conftest import make_short_trades
+
+    class CannedEvaluator:
+        async def evaluate(self, risk, payload_json):
+            return {
+                "summary": "test",
+                "behavior_summary": {"x": 1},
+                "evidence_description_list": [
+                    "[WHAT] kept item one",
+                    "",                          # empty string, dropped
+                    "   ",                       # whitespace only, dropped
+                    None,                        # not a string, dropped
+                    42,                          # not a string, dropped
+                    "[WHEN] kept item two   ",   # stripped + kept
+                ],
+            }
+
+    trades = make_short_trades(n=30, side="buy", profit=1.0)
+    for i in range(0, 30, 2):
+        trades[i]["side"] = "sell"
+    snap = AccountSnapshot.model_validate(make_snapshot_payload(trades=trades))
+    run = await AnalysisRun.create(trigger_type="manual_run", snapshot_count=1)
+
+    findings = await analyse_snapshot(
+        snapshot=snap, evaluator=CannedEvaluator(), run=run,
+        include_history=False, risks=(LATENCY_ARBITRAGE,),
+    )
+    la = findings[0]
+    assert la.evidence_description_list == [
+        "[WHAT] kept item one",
+        "[WHEN] kept item two",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_evidence_description_list_empty_when_llm_raises(db):
+    """LLM exception: score is still computed, list stays []."""
+    from app.services import analyse_snapshot
+    from .conftest import make_short_trades
+
+    class BoomEvaluator:
+        async def evaluate(self, risk, payload_json):
+            raise RuntimeError("boom: anthropic 500")
+
+    trades = make_short_trades(n=30, side="buy", profit=1.0)
+    for i in range(0, 30, 2):
+        trades[i]["side"] = "sell"
+    snap = AccountSnapshot.model_validate(make_snapshot_payload(trades=trades))
+    run = await AnalysisRun.create(trigger_type="manual_run", snapshot_count=1)
+
+    findings = await analyse_snapshot(
+        snapshot=snap, evaluator=BoomEvaluator(), run=run,
+        include_history=False, risks=(LATENCY_ARBITRAGE,),
+    )
+    la = findings[0]
+    assert la.risk_score == 100  # rule engine still produced the verdict
+    assert la.risk_level == "critical"
+    assert la.evidence_description_list == []  # no list because LLM exploded
+    assert "LLM narration unavailable" in la.analysis  # operator-visible
+
+
+@pytest.mark.asyncio
 async def test_evidence_description_list_empty_when_prescreen_skipped(
     db, evaluator, monkeypatch
 ):

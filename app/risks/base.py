@@ -194,11 +194,15 @@ STYLE RULES for evidence_description_list
 """
 
 
-# Shared tool. `summary` and `behavior_summary` are the only fields the
-# service consumes. `notable_patterns` is an optional advisory field.
-# `evaluations` is kept as an optional echo so legacy fixtures keep
-# validating, but the service ignores it — the rule engine is the source
-# of truth for `true` / `observed_value`.
+# Shared tool. Three required fields are consumed by the service:
+#   - summary                    (one or two sentence narrative)
+#   - behavior_summary           (rolling per-account JSON)
+#   - evidence_description_list  (4 plain-English items for the risk
+#                                 officer: [WHAT], [WHY], [HOW], [WHEN])
+# `notable_patterns` is an optional advisory field. `evaluations` is kept
+# as an optional echo so legacy fixtures keep validating, but the service
+# ignores it — the rule engine is the source of truth for `true` /
+# `observed_value`.
 REPORT_EVALUATION_TOOL: dict = {
     "name": "report_evaluation",
     "description": (
