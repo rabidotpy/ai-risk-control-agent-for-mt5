@@ -39,3 +39,9 @@ htmlcov/
 # --- Logs ---
 *.log
 logs/
+
+# --- Raw broker exports ---
+# Real client trade-history xlsx files contain PII (names, emails, phones)
+# and must never be committed. Use the paired-snapshot JSON fixtures under
+# tests/test_rules/ for regression tests instead.
+*.xlsx
