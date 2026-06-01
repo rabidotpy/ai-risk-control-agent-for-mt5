@@ -19,6 +19,7 @@ from fastapi import FastAPI
 from tortoise.contrib.fastapi import RegisterTortoise
 
 from .api import router
+from .api.middleware import RequestLoggingMiddleware
 from .config import settings
 from .db import TORTOISE_ORM
 from .llm import LLMEvaluator
@@ -112,6 +113,7 @@ def create_app(
     app.state.evaluator = evaluator
     app.state.callback_fn = callback_fn
     app.state.job_queue = job_queue
+    app.add_middleware(RequestLoggingMiddleware)
     app.include_router(router)
     return app
 

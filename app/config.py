@@ -74,5 +74,15 @@ class Settings(BaseSettings):
     # behaves consistently: low scores stay silent end-to-end.
     llm_narrate_min_score: int = 60
 
+    # Request logging ------------------------------------------------------
+    # Every /analyse_risk call is captured to the request_log table and
+    # summarised to stdout. Bodies larger than this size are stored as
+    # `{"_truncated": true, "size": N}` to prevent runaway DB growth from
+    # a misbehaving client.
+    request_log_max_body_bytes: int = 1_048_576  # 1 MiB
+    # When False, the middleware does nothing (useful for very chatty
+    # local dev / load tests). On in production.
+    request_logging_enabled: bool = True
+
 
 settings = Settings()

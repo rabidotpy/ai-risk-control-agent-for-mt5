@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 
 from ..config import settings
-from ..models import AnalysisRun, RiskEvaluation, RiskHistorySummary
+from ..models import AnalysisRun, RequestLog, RiskEvaluation, RiskHistorySummary
 from ..schemas.analysis import AnalyseRiskRequest, EnqueuedJob, RiskFinding
 from ..services import Job, analyse_snapshots, filter_high_risk_accounts
 from .deps import CallbackDep, EvaluatorDep, get_job_queue
@@ -200,6 +200,44 @@ async def get_analyses(
             "behavior_summary": r.behavior_summary,
             "window_start": r.window_start.isoformat(),
             "window_end": r.window_end.isoformat(),
+        }
+        for r in rows
+    ]
+
+
+@router.get("/request-logs", response_model=list[dict])
+async def get_request_logs(
+    limit: int = Query(20, ge=1, le=200),
+    path: str | None = Query(None, description="Filter by request path"),
+    status: int | None = Query(None, description="Filter by HTTP status code"),
+) -> list[dict]:
+    """Return the most recent captured HTTP requests + responses.
+
+    Defaults to the last 20 entries, newest first. Use this on the server
+    to see what Alex actually sent us without trawling tcpdump or stdout.
+
+    Example:
+        curl 'http://localhost:8000/request-logs?limit=5'
+        curl 'http://localhost:8000/request-logs?path=/analyse_risk&status=200'
+    """
+    qs = RequestLog.all().order_by("-timestamp").limit(limit)
+    if path is not None:
+        qs = qs.filter(path=path)
+    if status is not None:
+        qs = qs.filter(status_code=status)
+    rows = await qs
+    return [
+        {
+            "id": r.id,
+            "timestamp": r.timestamp.isoformat(),
+            "method": r.method,
+            "path": r.path,
+            "status_code": r.status_code,
+            "duration_ms": r.duration_ms,
+            "client_host": r.client_host,
+            "request_body": r.request_body,
+            "response_body": r.response_body,
+            "error": r.error,
         }
         for r in rows
     ]

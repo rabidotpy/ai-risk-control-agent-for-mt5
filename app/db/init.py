@@ -16,7 +16,7 @@ TORTOISE_ORM: dict = {
     "connections": {"default": settings.database_url},
     "apps": {
         "models": {
-            "models": ["app.models.analysis"],
+            "models": ["app.models.analysis", "app.models.request_log"],
             "default_connection": "default",
         }
     },
