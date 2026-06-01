@@ -1,124 +1,148 @@
-# Data Requirements Matrix — PRD §6.3 sub-rules vs Alex's documented schema
+# Data Requirements Matrix — current implementation state
 
-> The strict mapping of every sub-rule to the data fields it *cannot fire without*. Anything not listed here is not strictly required.
-> Reference: PRD section 6.3 ("Rule Examples") in `BestWingGlobal_MT5_AI_Risk_Control_Agent_MVP_PRD_EN copy.md`.
-> Reference: Alex's documented response schema (deposits / withdraws / trades / bonus arrays).
+> Last updated: 2026-06-01.
+> This file describes what data is actually being used by each live sub-rule
+> today, what data is still missing, and what we deliberately chose not to
+> request. It replaces the earlier blocker-style matrix; most rules that
+> were "BLOCKED" in earlier versions are now live.
 
-## Legend
+## How to read this
 
-- **WORKS** — the rule can fire on Alex's documented schema as-is.
-- **BLOCKED (broker)** — needs a field Alex must add to his payload. Cannot work around without him.
-- **BLOCKED (window)** — needs a longer time window than Alex's per-call data; we can solve internally by aggregating stored pulls.
-- **BLOCKED (out of scope)** — needs data we never expect to receive (tick-level quotes, peer averages); rule must be approximated or dropped.
+Status values used in the per-risk tables below:
 
----
-
-## 1. Latency Arbitrage
-
-| PRD §6.3 sub-rule                                           | What's strictly needed                                                                | Status            | Notes |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------- | ----------------- | ----- |
-| `trade_count_6h >= 30`                                      | `trades` array, `trade.time`                                                          | **WORKS**         | Already on Alex's wire. |
-| `median_holding_time <= 30 seconds`                         | `trade.open_time` **and** `trade.close_time`                                          | **BLOCKED (broker)** | Alex sends one timestamp called `time`. Need both endpoints. |
-| `profitable trades within quote spike window >= 60%`        | tick-level quote history per symbol + per-trade open + per-trade close + per-trade profit | **BLOCKED (out of scope)** | Tick history is heavy market data we won't get from this API. Replace with a workable proxy (positive-slippage signal) and document the deviation. |
-| `positive_slippage_ratio >= 3x peer average`                | per-trade slippage (or `bid_at_open` + `ask_at_open` + direction) **and** a peer baseline computed across accounts in the same group | **BLOCKED (broker + scope)** | Per-trade slippage requires bid/ask at open + buy/sell side. Peer baseline requires cross-account aggregation we don't currently do. Drop the "3x peer" qualifier; use absolute threshold. |
-
-**Net for latency arbitrage:** 1 of 4 PRD-literal rules is currently live. Three need broker fields plus, for the last two, a meaningful scope decision (drop quote-spike windowing; replace 3x-peer with absolute threshold).
+- **LIVE** — the rule fires from data we already receive and the code is in production.
+- **DATA-CAPPED** — the code is shipped but the rule cannot fire because a required external field is still not delivered. The system returns `insufficient_data` for that rule.
+- **DEPRECATED** — the original PRD sub-rule was replaced with a different sub-rule for a documented reason. See the Rule Replacements section.
 
 ---
 
-## 2. Scalping Violation
+## 1. Latency Arbitrage (4 sub-rules, all LIVE)
 
-| PRD §6.3 sub-rule                                | What's strictly needed                                                          | Status                | Notes |
-| ------------------------------------------------ | ------------------------------------------------------------------------------- | --------------------- | ----- |
-| `trade_count_24h >= 100`                         | trades over the past 24h (any timestamp field)                                  | **BLOCKED (window)**  | Alex's per-call data is 6h. We solve internally by aggregating across the last four stored 6h pulls. No request to Alex needed. |
-| `short_holding_ratio_60s >= 70%`                 | `trade.open_time` **and** `trade.close_time`                                    | **BLOCKED (broker)**  | Same `open_time` ask as Latency R2. |
-| `win_rate >= 75%`                                | `trade.profit`                                                                   | **WORKS**             | Already on Alex's wire. |
-| `repeated lot size / TP / SL pattern = true`     | `trade.volume`, `trade.stop_loss`, `trade.take_profit`                          | **WORKS**             | All three fields are on Alex's wire. |
+| Sub-rule (current) | Data fields it uses | Status |
+| --- | --- | --- |
+| `trade_count_in_window >= 30` | `trades[]` count | LIVE |
+| `median_holding_time_seconds <= 30` | `trade.open_time`, `trade.close_time` | LIVE |
+| `minority_side_ratio >= 0.2` | `trade.side` | LIVE |
+| `win_rate >= 0.9 AND batch_close_ratio <= 0.2` | `trade.profit`, `trade.close_time` | LIVE |
 
-**Net for scalping:** 2 of 4 live. R1 unblocks itself once we have ≥4 historical pulls in DB. R2 needs `open_time` from Alex.
-
----
-
-## 3. Swap Arbitrage
-
-| PRD §6.3 sub-rule                          | What's strictly needed                                                                  | Status                | Notes |
-| ------------------------------------------ | --------------------------------------------------------------------------------------- | --------------------- | ----- |
-| `swap_profit_ratio_30d >= 60%`             | 30 days of `trades` with `swaps` and `profit`                                           | **BLOCKED (window)**  | Internal DB aggregation across 30 days × 4 daily pulls = 120 stored pulls. No request to Alex needed. |
-| `positions repeatedly opened before rollover` | `trade.open_time` + the broker's actual rollover hour                                | **BLOCKED (broker)**  | Need `open_time` + confirmation of rollover hour (UTC midnight is a guess). |
-| `positions closed after swap posting`      | `trade.close_time` + swap-posting time                                                  | **BLOCKED (broker)**  | Confirm `time` = close_time. Swap-posting time can be assumed = rollover hour. |
-| `price movement PnL is low`                | `trade.profit`, `trade.swaps`, `trade.commission`                                       | **WORKS approximately** | Profit + swaps are on the wire. Commission is missing; assume 0 (commission is a small distortion to a "low PnL" check). |
-
-**Net for swap arbitrage:** 1 fully live, 1 approximately live. Two rules need `open_time`/`close_time` clarification + the broker's rollover hour.
+Two PRD-literal sub-rules were replaced; see Rule Replacements section.
 
 ---
 
-## 4. Bonus / Credit Abuse
+## 2. Scalping Violation (4 sub-rules, all LIVE)
 
-| PRD §6.3 sub-rule                                              | What's strictly needed                                              | Status                | Notes |
-| -------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------- | ----- |
-| `bonus_used = true` (within last 30 days)                      | bonus events in last 30 days                                        | **BLOCKED (window)**  | Internal DB aggregation. We see only in-window bonuses today. |
-| `high leverage / high frequency trading within 24h`            | `account.leverage` AND trade count in 24h after bonus               | **BLOCKED (broker)**  | Frequency half works (with internal 24h aggregation). Leverage is missing — Alex must supply it (per-account, not per-trade). |
-| `linked accounts share IP / device / wallet / IB`              | per-account linkage data: list of related logins + sharing vectors   | **BLOCKED (broker)**  | Entirely absent from Alex's schema. Likely a separate endpoint or per-account property. |
-| `opposite trades exist among linked accounts`                  | linked-account list + their recent trades                           | **BLOCKED (broker)**  | Depends on linkage data. |
-| `withdrawal requested soon after profit`                       | `withdraws[]`, `trades[].profit`, both with timestamps              | **WORKS**             | All on the wire (within 6h window). |
+| Sub-rule (current) | Data fields it uses | Status |
+| --- | --- | --- |
+| `trade_count_in_window >= 25` | `trades[]` count | LIVE |
+| `short_holding_ratio_60s >= 0.7` | `open_time`, `close_time` | LIVE |
+| `win_rate >= 0.75` | `profit` | LIVE |
+| `repeated_lot_sl_tp_pattern_ratio >= 0.5` | `volume`, `stop_loss`, `take_profit` | LIVE |
 
-**Net for bonus abuse:** 1 of 5 fully live. R1 unblocks via DB aggregation; R2 partly via aggregation but needs `leverage`; R3/R4 entirely depend on linkage data.
-
----
-
-## Cross-cutting summary
-
-### Per-trade fields strictly needed from Alex (the "Desperate Need" list)
-
-| Field             | Unblocks (rule count)                                    | Why we cannot work around                                  |
-| ----------------- | -------------------------------------------------------- | ---------------------------------------------------------- |
-| `open_time`       | Latency R2, Scalping R2, Swap R2 (4 rules)               | Holding time and rollover-spanning are functions of two timestamps. No proxy exists. |
-| Confirm `time` semantic | All time-based rules                                | Without knowing if `time` is open or close, every holding/timing computation is undefined. |
-| `bid_at_open`     | Latency R4 (positive slippage)                           | Slippage = fill price − quote at fill. Quote is not in the row. |
-| `ask_at_open`     | Latency R4                                                | Same. |
-| Trade direction (buy/sell) | Latency R4                                       | "In trader's favour" depends on side: `price < ask` for buys, `price > bid` for sells. |
-
-### Per-account fields strictly needed from Alex
-
-| Field        | Unblocks                                | Notes                                                                |
-| ------------ | --------------------------------------- | -------------------------------------------------------------------- |
-| `leverage`   | Bonus abuse R2 (the "high leverage" half) | Per account, not per trade. Could be on a separate "accounts" endpoint or attached to each row. |
-
-### Cross-account data strictly needed from Alex
-
-| Data                | Unblocks                                  | Notes                                                          |
-| ------------------- | ----------------------------------------- | -------------------------------------------------------------- |
-| Linked-account list | Bonus abuse R3 + R4                        | Per-account list of related logins with the sharing vector (ip / device / wallet / ib / kyc). Likely a separate endpoint. |
-
-### Things we deliberately don't ask Alex for
-
-| Item                          | Why                                                                |
-| ----------------------------- | ------------------------------------------------------------------ |
-| 24h / 30d windows of data     | We aggregate from our own DB across stored 6h pulls. Smaller payloads + idempotent replay. |
-| Tick-level quote history      | Massive data; out of scope for an MVP risk-control feed. We replace the "quote spike window" rule with a positive-slippage proxy and document the deviation. |
-| Peer-average baselines        | Cross-account computation we'd do internally, not request from Alex. The "3x peer" qualifier becomes an absolute threshold. |
-| `commission` per trade        | A small distortion in swap-arb R4; defensible to assume 0 with a documented note. Add later if convenient. |
-| News calendar                 | Not used by any of the 4 risks. Reserved for the news-window trigger (PRD §5.2), out of scope for the analysis layer. |
+The PRD `trade_count_24h >= 100` threshold was rescaled to `>= 25` for the
+6h scan window. Marked provisional until Phase B introduces 24h aggregation
+from our own database.
 
 ---
 
-## What the prompts honestly say today
+## 3. Swap Arbitrage (4 sub-rules, all LIVE)
 
-The prompts in `app/risks/*.py` reflect this matrix: rules whose data is missing return `insufficient_data` with an explicit reason. The score caps reflect what we can actually evaluate:
+| Sub-rule (current) | Data fields it uses | Status |
+| --- | --- | --- |
+| `swap_profit_ratio >= 0.6` | `swaps`, `profit` | LIVE |
+| `positions_held_across_rollover >= 1` | `open_time`, `close_time` | LIVE |
+| `swap_dominant_closed_positions >= 5` | `swaps`, `profit`, `commission` | LIVE |
+| `average_price_movement_pnl_low` | `swaps`, `profit`, `commission` | LIVE |
 
-| Risk                | Live rules | Max score today |
-| ------------------- | ---------- | --------------- |
-| Latency arbitrage   | 1 of 4     | 25              |
-| Scalping            | 2 of 4 (3 once aggregation lands)     | 50 (75)         |
-| Swap arbitrage      | 1 of 4 (3 once aggregation lands)     | 25 (75)         |
-| Bonus abuse         | 1 of 5 (3 once aggregation + leverage land) | 20 (60)   |
-
-When Alex provides each missing field, the corresponding rules light up automatically — no code change required.
+Open question to Alex: are `commission` and `swaps` truly populated, or
+defaulted to zero by his adapter? Currently they are zero on the Islamic
+group test account, which may be legitimate (no-swap account) or may hide
+a real value. Confirm by next deals export from a non-Islamic account.
 
 ---
 
-## Action ladder (in order of leverage)
+## 4. Bonus / Credit Abuse (5 sub-rules, 3 LIVE / 2 DATA-CAPPED)
 
-1. **Send Alex the focused-needs message** (separate file). One conversation, three categories of asks: per-trade fields, per-account leverage, cross-account linkage.
-2. **Build internal DB aggregation** across stored pulls so the 24h / 30d / 30-day rules can fire from history (no Alex dependency). This is part of Phase B.
-3. **Document the deviations from PRD-literal** (quote spike window, 3x peer average) so anyone reading the prompts and PRD side-by-side knows we knowingly substituted simpler signals.
+| Sub-rule (current) | Data fields it uses | Status |
+| --- | --- | --- |
+| `bonus_received_in_window` | `bonus[]` | LIVE |
+| `trades_after_bonus_in_window >= 8` | `bonus[].time`, `trade.open_time` | LIVE (provisional threshold) |
+| `linked_account_count >= 2` | `linked_accounts[]` | **DATA-CAPPED** |
+| `linked_with_opposing_trades >= 1` | `linked_accounts[].opposing_trade_count` | **DATA-CAPPED** |
+| `withdrawal_after_bonus_in_window` | `bonus[].time`, `withdraws[].time` | LIVE |
+
+Two sub-rules are blocked because the linked-accounts feed from Alex's
+CRM has not been delivered yet. Until that lands, this risk caps at 3 of 5
+sub-rules firing, score 60 (medium). The threshold for R2 was rescaled to
+`>= 8` for the 6h window (PRD literal was `>= 30` over 24h), provisional
+until 24h aggregation is built.
+
+---
+
+## 5. Profitable Client Pattern (4 sub-rules, all LIVE) — NEW
+
+Added 2026-06-01. This is an operational signal for the dealing desk,
+not a compliance flag. It identifies consistently profitable clients so
+the broker can decide whether to route them to A-book.
+
+| Sub-rule | Data fields it uses | Status |
+| --- | --- | --- |
+| `profit_extraction_rate >= 100` | `profit`, snapshot `start_time` and `end_time` | LIVE |
+| `trade_count >= 50 AND profit_factor >= 1.2` | `trades[]` count, `profit` | LIVE |
+| `biggest_single_win_share <= 0.30` | `profit` | LIVE |
+| `profitable_days_ratio >= 0.60` | `profit`, `close_time` | LIVE |
+
+Uses only data we already receive. No schema change required.
+
+---
+
+## Rule Replacements (kept for traceability)
+
+| Original PRD sub-rule | What we shipped instead | Reason |
+| --- | --- | --- |
+| Latency: `positive_slippage_ratio >= 0.5` | `minority_side_ratio >= 0.2` | The slippage rule depended on `bid_at_open` and `ask_at_open` which Alex defaults to zero. Every sell trade then satisfied "open_price > 0" and the rule fired on grids by accident. Caught as a false positive on real client account 250030. |
+| Latency: `short_holding_ratio_30s >= 0.6` | `win_rate >= 0.9 AND batch_close_ratio <= 0.2` | The short-hold rule was redundant with R2 (median holding). The replacement captures the cross-trade signal that distinguishes real latency arbitrage (one-by-one exits, near-100% wins) from a martingale grid (batched exits, occasional losses). |
+| Latency: `profitable trades in quote spike window >= 60%` | Dropped | Required tick-level quote history which is out of scope. |
+| Latency: `positive_slippage_ratio >= 3x peer average` | Dropped (peer averaging) | Cross-account peer baseline computation was not built. Replaced upstream by the slippage rule, then that was also replaced. |
+| Scalping: `trade_count_24h >= 100` | `trade_count_in_window >= 25` | Window scaling. Provisional until Phase B 24h aggregation. |
+| Bonus: `trades_within_24h_of_bonus >= 30` | `trades_after_bonus_in_window >= 8` | Window scaling. Provisional. |
+| Bonus: `withdrawal_within_72h_of_bonus` | `withdrawal_after_bonus_in_window` | The 72h window cannot be checked from a 6h pull. Until Phase B aggregation lands, "after bonus" is the closest honest check. |
+
+---
+
+## Per-trade fields actually used today
+
+| Field on `trade` | Used by | Notes |
+| --- | --- | --- |
+| `id`, `login`, `group` | All | Identification |
+| `symbol` | (no rule keys off it today, but useful in alerts) | Concentration analysis is per-trader, not per-rule |
+| `volume` | Scalping R4 | Lot-size bucketing |
+| `side` | Latency R3 | Buy / sell direction |
+| `open_time`, `close_time` | Latency R2/R4, Scalping R2, Swap R2, Bonus R2 | Both required for any holding-time or rollover rule |
+| `open_price`, `close_price` | `derive_exit_reason` (for fallback) | Primary use: classify trade exits |
+| `bid_at_open`, `ask_at_open` | **NONE today** | Still required by schema. To be deprecated. |
+| `stop_loss`, `take_profit` | Scalping R4, `derive_exit_reason` | |
+| `swaps`, `commission` | Swap R1/R3/R4 | |
+| `profit` | Many | Net of swap + commission |
+| `comment` | `derive_exit_reason` | Brokers tag `[tp ...]` / `[sl ...]` here |
+
+---
+
+## What we still need from Alex
+
+| Item | Unblocks | Why we cannot work around |
+| --- | --- | --- |
+| Linked-account list | Bonus Abuse R3, R4 | Requires CRM data the MT5 deal stream does not contain. Until delivered, bonus abuse caps at 3 of 5 sub-rules firing. |
+| Confirm `commission` and `swaps` are populated | Swap Arbitrage all 4 rules | Currently zero on the Islamic account; need a non-Islamic example to verify the adapter is forwarding the real values. |
+| Confirm the `exit_reason` / MT5 deal-reason field would be available IF needed | Future rules | We derive it today from comment + price comparison at 100% accuracy. Worth knowing the field exists in case derivation breaks on another broker. |
+
+---
+
+## What we will not ask for (deliberate)
+
+| Item | Why |
+| --- | --- |
+| `bid_at_open`, `ask_at_open` | No live rule uses them. Currently defaulted to zero by Alex with no impact. Field should be removed from the schema as cleanup. |
+| Tick-level quote history | Out of scope; replaced by simpler proxies. |
+| Peer-average baselines | Cross-account computation we would do internally if needed. The PRD "3x peer" qualifier was replaced by absolute thresholds. |
+| News calendar | Currently not needed by any live rule. May be useful for a future news-arbitrage rule (PRD §6.3 rule 6 — not yet implemented). |
+| 24h / 30d aggregated windows | We will build this from our own database (Phase B) rather than ask Alex to widen the pull. |

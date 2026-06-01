@@ -1,211 +1,253 @@
-Here is the inverse mapping. For every sub rule across the four risks I'll cover what it means in plain English, the MT5 values it needs, how those values combine into the True or False answer, and whether it can fire today.
+# Sub-Rules — current state, in plain English
+
+> Last updated: 2026-06-01.
+> Documents every sub-rule that is live in the codebase today, what it
+> checks, what data it uses, and how the score is computed. The 4 risk
+> types from the PRD are joined by a 5th operational risk type
+> (Profitable Client Pattern) added on 2026-06-01.
+
+## How the score and the rule engine actually work today
+
+1. **Rules are deterministic Python.** The rule engine in `app/rules/` reads the
+   snapshot and produces a list of `RuleOutcome(rule, observed_value, true,
+   reason)` per risk type. Same input always produces the same TRUE / FALSE
+   pattern. The LLM never decides whether a rule fires.
+2. **Score formula.** `round(100 / N × count_true)` where `N` is the number of
+   sub-rules. So 3 of 4 fired on a 4-rule risk = 75 (high).
+3. **Level bands.** low (0–39), watch (40–59), medium (60–74), high (75–89),
+   critical (90+). For a 4-rule risk the possible scores are 0, 25, 50, 75,
+   100; medium is unreachable on those.
+4. **LLM is called only for narrative.** Summary, behaviour history, and the
+   4-item plain-English `evidence_description_list`. It does NOT decide the
+   score.
+5. **Two threshold gates.** `llm_narrate_min_score = 60` skips the LLM for
+   low-scoring findings (templated narrative instead). `callback_min_score = 60`
+   skips the Telegram notification for accounts whose max score is below 60.
+6. **Prescreen.** A cheap deterministic check (`app/services/prescreen.py`)
+   runs before any LLM call and skips obviously-irrelevant risks (e.g. empty
+   snapshot, no bonus events for the bonus rule).
 
-Latency Arbitrage (4 sub rules)
-trade_count_6h >= 30
-Plain English. Did the trader open at least 30 positions in the last 6 hours?
+---
 
-Values it needs.
+## 1. Latency Arbitrage (4 sub-rules)
 
-trades array (one row per closed position in the 6 hour window)
-time on each trade row (so we know it falls inside the window)
-How they combine. Just count the number of rows in trades. The 6 hour window is already the call's window, so no time filtering is needed. True if the count is at least 30.
+The system looks for traders who exploit a price-feed advantage: very high
+frequency, near-100% wins, both buy and sell sides, exits one trade at a time.
 
-Status. Lives. Already on Alex's wire.
+### R1 — `trade_count_in_window >= 30`
+Has the account placed at least 30 closed positions in the scan window?
+A latency-arb playbook requires volume; a normal trader places far fewer.
 
-median_holding_time <= 30 seconds
-Plain English. Half or more of this trader's positions were held for under 30 seconds.
+**Data:** `trades[]` count.
+**Status:** LIVE.
 
-Values it needs.
+### R2 — `median_holding_time_seconds <= 30`
+Median of `(close_time - open_time)` across all trades, in seconds.
+A real arbitrageur opens and closes in seconds.
 
-open_time on each trade
-close_time on each trade (this is what Alex's time field probably is, but he needs to confirm)
-How they combine. For every trade compute holding_seconds = close_time - open_time. Take the median across all trades. True if the median is at most 30.
+**Data:** `open_time`, `close_time`.
+**Status:** LIVE. (Was blocked when Alex only sent one timestamp; resolved.)
 
-Status. Blocked because Alex only sends one timestamp called time. Until he adds the second timestamp and tells us which one is which, holding seconds cannot be computed.
+### R3 — `minority_side_ratio >= 0.2`
+`min(buys, sells) / total`. A real arbitrageur trades whichever side the
+broker's quote is slow on, so the split tends toward 50/50. A one-directional
+trader (e.g. a martingale grid) scores near 0.
 
-positive_slippage_ratio >= 0.5
-Plain English. More than half of the trader's entries were filled at a better price than the market was showing at that moment.
+**Data:** `side`.
+**Status:** LIVE. **Replaced the original PRD `positive_slippage_ratio` rule**
+because that rule relied on `bid_at_open`/`ask_at_open` which were defaulted to
+zero and caused a false-positive on client account 250030.
 
-Values it needs.
+### R4 — composite: `win_rate >= 0.9 AND batch_close_ratio <= 0.2`
+A real arbitrageur wins almost everything (each entry was near-certain) AND
+closes trades one at a time as each opportunity disappears.
+`batch_close_ratio` = fraction of trades whose `close_time` second is shared by
+3+ other trades. A grid trader closes everything together; the ratio is high.
 
-Per trade direction (buy or sell)
-Per trade price (the fill)
-Per trade bid_at_open and ask_at_open (the market quote at the moment of the open)
-How they combine. For each trade where bid and ask are not null, decide if the fill was favourable. For a buy that means price < ask_at_open. For a sell it means price > bid_at_open. Count favourable fills, divide by the count of evaluable trades, and the rule fires if the ratio is at least 0.5.
+**Data:** `profit`, `close_time`.
+**Status:** LIVE. **Replaced the original PRD `short_holding_ratio_30s` rule**
+because that one was redundant with R2 and missed the grid pattern.
 
-Status. Blocked. Direction, bid at open, and ask at open are all missing from Alex's wire.
+---
 
-short_holding_ratio_30s >= 0.6
-Plain English. At least 60 percent of positions were closed within 30 seconds of being opened.
+## 2. Scalping Violation (4 sub-rules)
 
-Values it needs.
+Very short-duration trades in high frequency, often automated. Whether
+scalping is contractually forbidden depends on the account group; this
+rule flags the pattern only.
 
-open_time and close_time on each trade (so we can derive holding_seconds)
-How they combine. Count trades whose holding seconds are at most 30. Divide by total trade count. True if the ratio is at least 0.6.
+### R1 — `trade_count_in_window >= 25`
+At least 25 closed positions in the window. PRD literal was 100 over 24h; we
+rescaled to 25 over 6h. Provisional until Phase B 24h aggregation lands.
 
-Status. Blocked, same root cause as median_holding_time. Needs open_time from Alex.
+**Data:** `trades[]` count.
+**Status:** LIVE (provisional threshold).
 
-Scalping Violation (4 sub rules)
-trade_count_24h >= 100
-Plain English. The trader opened at least 100 positions in the last 24 hours.
+### R2 — `short_holding_ratio_60s >= 0.7`
+At least 70% of trades held for 60 seconds or less. The defining trait.
 
-Values it needs.
+**Data:** `open_time`, `close_time`.
+**Status:** LIVE.
 
-Trades from the last 24 hours, just to count them
-A timestamp on each trade so we can verify the trade is inside the 24 hour window
-How they combine. Count trades whose open time is within the last 24 hours of end_time. True if the count is at least 100.
+### R3 — `win_rate >= 0.75`
+At least 75% of trades profitable. Needs at least 5 trades to be meaningful.
 
-Status. Blocked by window. Each Alex call gives us 6 hours, so we cannot see the full 24 hours from one call. We solve this internally by aggregating four consecutive stored 6 hour pulls into a 24 hour view. No request to Alex is needed.
+**Data:** `profit`.
+**Status:** LIVE.
 
-short_holding_ratio_60s >= 0.7
-Plain English. At least 70 percent of positions were held for 60 seconds or less.
+### R4 — `repeated_lot_sl_tp_pattern_ratio >= 0.5`
+At least half of trades share a `(volume, stop_loss, take_profit)` triple
+with 2 or more other trades. Catches EA bots that fire the same configuration
+on every trade. SL and TP of 0 are treated as the same value as null
+("unset").
 
-Values it needs.
+**Data:** `volume`, `stop_loss`, `take_profit`.
+**Status:** LIVE.
 
-open_time and close_time on each trade
-How they combine. Count trades with holding seconds at most 60, divide by total. True if the ratio is at least 0.7.
+---
 
-Status. Blocked by holding seconds. Needs open_time from Alex.
+## 3. Swap Arbitrage (4 sub-rules)
 
-win_rate >= 0.75
-Plain English. At least 75 percent of closed positions were profitable.
+The trader profits mostly from overnight swap interest rather than from
+price movement. Often holds across UTC midnight, often hedges across linked
+accounts to neutralise price risk.
 
-Values it needs.
+### R1 — `swap_profit_ratio >= 0.6`
+`total_swap / total_profit` when total profit is positive. At least 60% of
+net profit coming from swap.
 
-profit on each closed trade
-How they combine. Count trades with profit > 0, divide by total. True if the ratio is at least 0.75. We require at least 5 closed positions for the answer to be meaningful, otherwise we report insufficient_data.
+**Data:** `swaps`, `profit`.
+**Status:** LIVE.
 
-Status. Lives. Profit is on Alex's wire.
+### R2 — `positions_held_across_rollover >= 1`
+At least one trade whose `open_time` and `close_time` fall on different
+UTC dates. UTC midnight is used as a proxy for the broker's rollover hour.
 
-repeated_lot_sl_tp_pattern_present
-Plain English. A large share of the trader's positions share the exact same volume, stop loss and take profit triple, suggesting an automated pattern.
+**Data:** `open_time`, `close_time`.
+**Status:** LIVE.
 
-Values it needs.
+### R3 — `swap_dominant_closed_positions >= 5`
+At least 5 trades where positive swap dominates `price_pnl`, defined as
+`profit − swaps − commission`, with `abs(price_pnl) <= 0.1 × swaps`.
 
-volume on each trade
-stop_loss on each trade
-take_profit on each trade
-How they combine. Bucket trades by the triple (volume, stop_loss, take_profit), treating 0 and null as the same value (both meaning unset). A pattern bucket has 3 or more trades. Count trades that belong to any pattern bucket and divide by total. True if the ratio is at least 0.5.
+**Data:** `swaps`, `profit`, `commission`.
+**Status:** LIVE.
 
-Status. Lives. All three fields are on Alex's wire.
+### R4 — `average_price_movement_pnl_low`
+For all positive-swap trades, the ratio of summed `price_pnl` to summed
+positive swap falls within `[-0.2, +0.2]`. Meaning price movement is small
+relative to swap.
 
-Swap Arbitrage (4 sub rules)
-swap_profit_ratio >= 0.6
-Plain English. At least 60 percent of the trader's net profit came from swap interest, not from price movement.
+**Data:** `swaps`, `profit`, `commission`.
+**Status:** LIVE.
 
-Values it needs.
+---
 
-swaps on each trade
-profit on each trade
-How they combine. Sum swaps and sum profit across all trades in the window. The ratio is total_swap / total_profit, only computed when total profit is positive. True if the ratio is at least 0.6.
+## 4. Bonus / Credit Abuse (5 sub-rules, 3 LIVE / 2 DATA-CAPPED)
 
-Status. Lives on the per pull window. Cleaner over a 30 day window once we aggregate stored pulls.
+A trader uses a promotional bonus as margin, often via multiple accounts
+that hedge each other so one always wins, then withdraws the winning side.
 
-positions_held_across_rollover >= 1
-Plain English. At least one position was held across a daily rollover, which is when the broker posts overnight interest.
+### R1 — `bonus_received_in_window`
+Any bonus event in the snapshot's bonus array.
 
-Values it needs.
+**Data:** `bonus[]`.
+**Status:** LIVE.
 
-open_time on each trade
-close_time on each trade
-How they combine. A trade spans rollover if its open and close fall on different UTC calendar dates. Count those trades. True if the count is at least 1. (UTC midnight is a rough proxy for the broker's actual rollover hour. If the broker uses a different server time we'll need to adjust.)
+### R2 — `trades_after_bonus_in_window >= 8`
+At least 8 trades opened at or after the earliest bonus event in the window.
+PRD literal was 30 over 24h; rescaled to 8 over 6h. Provisional.
 
-Status. Blocked. Needs open_time from Alex.
+**Data:** `bonus[].time`, `trade.open_time`.
+**Status:** LIVE (provisional threshold).
 
-swap_dominant_closed_positions >= 5
-Plain English. At least 5 positions look like pure carry trades, where positive swap is the bulk of the profit and price movement is essentially flat.
+### R3 — `linked_account_count >= 2`
+At least 2 accounts linked to this one (shared IP, device, wallet, IB, or KYC).
 
-Values it needs.
+**Data:** `linked_accounts[]` from CRM.
+**Status:** **DATA-CAPPED.** Alex has not delivered the linked-accounts
+feed. Until then this rule cannot fire.
 
-profit on each trade
-swaps on each trade
-commission on each trade (assumed 0 if missing)
-How they combine. For each trade compute price_pnl = profit - swaps - commission. The trade is swap dominant if swaps > 0 AND abs(price_pnl) <= 0.1 \* swaps. Count swap dominant trades. True if the count is at least 5.
+### R4 — `linked_with_opposing_trades >= 1`
+At least one linked account has a positive `opposing_trade_count`, meaning
+it ran trades opposite to this account's trades on the same instrument.
 
-Status. Lives, with the small caveat that commission is assumed 0 when not provided.
+**Data:** `linked_accounts[].opposing_trade_count`.
+**Status:** **DATA-CAPPED.** Same dependency as R3.
 
-average_price_movement_pnl_low
-Plain English. Looking at all positions with positive swap, the price movement portion of profit is small compared to the swap portion. The trader is not making meaningful directional money.
+### R5 — `withdrawal_after_bonus_in_window`
+Any withdrawal whose `time` is at or after the earliest bonus event.
 
-Values it needs.
+**Data:** `bonus[].time`, `withdraws[].time`.
+**Status:** LIVE.
 
-profit, swaps, commission on each trade with positive swap
-How they combine. For trades with swaps > 0, sum price_pnl across them and sum swaps across them. Compute ratio = total_price_pnl / total_positive_swap. True if the ratio is between minus 0.2 and plus 0.2 inclusive.
+---
 
-Status. Lives, same commission caveat as the rule above.
+## 5. Profitable Client Pattern (4 sub-rules) — added 2026-06-01
 
-Bonus / Credit Abuse (5 sub rules)
-bonus_active_within_30_days
-Plain English. The trader received at least one bonus in the last 30 days.
+Not a compliance flag. An operational signal for the dealing desk to decide
+whether to route a consistently profitable client to A-book. Strategy-agnostic:
+catches discretionary scalpers, trend-followers, news traders, anyone who is
+extracting money from the book at a meaningful rate.
 
-Values it needs.
+### R1 — `profit_extraction_rate >= 100`
+`total_profit / window_days >= 100` USD per day. Equivalent to the
+$1,000-in-10-days principle the user set, normalised to a daily rate so it
+works for any scan window length.
 
-bonus array
-time on each bonus event
-How they combine. Check if any bonus event has a time greater than or equal to end_time - 30 days. True if at least one such event exists.
+**Data:** `profit` on every trade, snapshot `start_time` and `end_time`.
+**Status:** LIVE.
 
-Status. Blocked by window. We currently only see in-window bonuses (last 6 hours). Solved internally by aggregating bonus rows across the last 120 stored 6 hour pulls (30 days). No request to Alex is needed.
+### R2 — composite: `trade_count >= 50 AND profit_factor >= 1.2`
+`profit_factor = gross_wins / abs(gross_losses)`. PF = 1.0 is breakeven; PF ≥
+1.2 is a real edge. Combined with at least 50 trades, separates skill from
+a short lucky streak.
 
-trades_within_24h_of_bonus >= 30
-Plain English. After the most recent bonus the trader opened at least 30 positions inside 24 hours.
+**Data:** `trades[]` count, `profit`.
+**Status:** LIVE.
 
-Values it needs.
+### R3 — `biggest_single_win_share <= 0.30`
+The largest single winning trade contributes at most 30% of total gross
+wins. Catches the "one lucky trade carries the P&L" case; a real edge
+distributes wins across many trades.
 
-bonus array with timestamps (to find the most recent bonus event)
-open_time on each trade (to count trades inside the 24 hour window after the bonus)
-How they combine. Find bonus.time for the most recent bonus event. Count trades whose open time falls in [bonus.time, bonus.time + 24h]. True if the count is at least 30.
+**Data:** `profit`.
+**Status:** LIVE.
 
-Status. Blocked by open_time (also needs the 24 hour window which we'll get from DB aggregation, plus the bonus history that B1 also depends on).
+### R4 — `profitable_days_ratio >= 0.60`
+At least 60% of distinct trading days in the window ended net positive.
+Smooths out one-off lucky days. Requires at least 3 distinct trading days
+in the window to be meaningful.
 
-linked_account_count >= 2
-Plain English. At least 2 other accounts are linked to this one through shared IP, device, wallet, IB, or KYC identity.
+**Data:** `profit`, `close_time`.
+**Status:** LIVE.
 
-Values it needs.
+---
 
-A list of linked logins per account (not in the MT5 deal stream)
-How they combine. Just len(linked_accounts) >= 2.
+## Quick scoreboard
 
-Status. Blocked. Linkage data sits outside the MT5 deal stream. The MT5 platform's login audit gives us shared IP and device. The broker's CRM gives us shared wallet, IB code, and KYC name. Alex needs to expose this, probably as its own endpoint.
+| Rule | Status | Notes |
+| --- | --- | --- |
+| Latency: trade_count_in_window >= 30 | LIVE | |
+| Latency: median_holding_time <= 30s | LIVE | |
+| Latency: minority_side_ratio >= 0.2 | LIVE | Replaced PRD slippage rule |
+| Latency: win_rate >= 0.9 AND batch_close_ratio <= 0.2 | LIVE | Replaced PRD short-hold rule |
+| Scalping: trade_count_in_window >= 25 | LIVE | Threshold provisional |
+| Scalping: short_holding_ratio_60s >= 0.7 | LIVE | |
+| Scalping: win_rate >= 0.75 | LIVE | |
+| Scalping: repeated_lot_sl_tp_pattern_ratio >= 0.5 | LIVE | |
+| Swap: swap_profit_ratio >= 0.6 | LIVE | |
+| Swap: positions_held_across_rollover >= 1 | LIVE | |
+| Swap: swap_dominant_closed_positions >= 5 | LIVE | |
+| Swap: average_price_movement_pnl_low | LIVE | |
+| Bonus: bonus_received_in_window | LIVE | |
+| Bonus: trades_after_bonus_in_window >= 8 | LIVE | Threshold provisional |
+| Bonus: linked_account_count >= 2 | **DATA-CAPPED** | Needs linked-accounts feed |
+| Bonus: linked_with_opposing_trades >= 1 | **DATA-CAPPED** | Needs linked-accounts feed |
+| Bonus: withdrawal_after_bonus_in_window | LIVE | |
+| Profitable: profit_extraction_rate >= 100 | LIVE | |
+| Profitable: trade_count >= 50 AND profit_factor >= 1.2 | LIVE | |
+| Profitable: biggest_single_win_share <= 0.30 | LIVE | |
+| Profitable: profitable_days_ratio >= 0.60 | LIVE | |
 
-linked_with_opposing_trades >= 1
-Plain English. At least one of the linked accounts is running trades on the opposite side of the same instruments, which is the multi account hedging signal.
-
-Values it needs.
-
-The linked accounts list (from B3)
-Trade activity on each linked account, with direction
-How they combine. For each linked account, check if it has positions whose direction is opposite to this account's positions on the same symbol. Count linked accounts that meet that condition. True if the count is at least 1.
-
-Status. Blocked, same root as B3. Once Alex exposes linked accounts, this rule needs the direction and symbol on the linked account's recent trades too.
-
-withdrawal_within_72h_of_bonus
-Plain English. The trader requested a withdrawal within 72 hours after receiving a bonus.
-
-Values it needs.
-
-bonus array with timestamps
-withdraws array with timestamps
-How they combine. Find the most recent bonus event. Find the earliest withdraw whose time is greater than or equal to the bonus time. Compute hours_between = (withdraw.time - bonus.time) / 3600. True if such a withdrawal exists AND hours_between <= 72.
-
-Status. Lives within a single 6 hour window when both bonus and withdrawal land in the same window. Improves once DB aggregation lets us match bonuses from earlier windows to withdrawals in the current window.
-
-Quick scoreboard
-Rule Status Why
-trade_count_6h >= 30 Lives Just count trades
-median_holding_time <= 30 seconds Blocked Needs open_time from Alex
-positive_slippage_ratio >= 0.5 Blocked Needs direction + bid/ask at open from Alex
-short_holding_ratio_30s >= 0.6 Blocked Needs open_time from Alex
-trade_count_24h >= 100 Blocked by window Solve via DB aggregation across 4 stored pulls
-short_holding_ratio_60s >= 0.7 Blocked Needs open_time from Alex
-win_rate >= 0.75 Lives profit is on the wire
-repeated_lot_sl_tp_pattern_present Lives volume, SL, TP all on the wire
-swap_profit_ratio >= 0.6 Lives swaps + profit on the wire
-positions_held_across_rollover >= 1 Blocked Needs open_time from Alex
-swap_dominant_closed_positions >= 5 Lives swaps + profit on the wire (commission assumed 0)
-average_price_movement_pnl_low Lives same as above
-bonus_active_within_30_days Blocked by window Solve via DB aggregation across 120 stored pulls
-trades_within_24h_of_bonus >= 30 Blocked Needs open_time from Alex (plus 24h aggregation)
-linked_account_count >= 2 Blocked Needs linked accounts data from Alex
-linked_with_opposing_trades >= 1 Blocked Needs linked accounts data from Alex
-withdrawal_within_72h_of_bonus Lives bonus + withdraws on the wire
-So out of 17 sub rules, 7 are alive today on Alex's documented schema, 2 are blocked only by our own DB aggregation work (no Alex dependency), and 8 need fields Alex has to add. The four asks in his message cover all 8 of those Alex blockers.
+**21 sub-rules across 5 risk types. 19 are LIVE. 2 are DATA-CAPPED waiting on Alex's linked-accounts feed.**
