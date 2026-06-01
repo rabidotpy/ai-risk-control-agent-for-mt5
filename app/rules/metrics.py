@@ -8,11 +8,14 @@ unit-testable in isolation.
 
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, defaultdict
 from statistics import median
-from typing import Iterable
+from typing import Iterable, Literal
 
 from ..schemas import AccountSnapshot, Trade
+
+
+ExitReason = Literal["take_profit", "stop_loss", "manual"]
 
 
 def _holding_seconds(trade: Trade) -> float:
@@ -184,3 +187,125 @@ def withdrawal_after_bonus_present(snapshot: AccountSnapshot) -> bool | None:
 
 def bonus_received_present(snapshot: AccountSnapshot) -> bool:
     return len(snapshot.bonus) > 0
+
+
+# -----------------------------------------------------------------------------
+# Metrics used by the profitable_client_pattern rule.
+# These are strategy-agnostic: they describe how meaningful and how repeatable
+# the trader's edge is, not which strategy they are running.
+# -----------------------------------------------------------------------------
+
+
+def derive_exit_reason(trade: Trade, *, relative_tolerance: float = 0.0005) -> ExitReason:
+    """Classify how a trade was exited.
+
+    Primary signal: the broker tags the `comment` field with `[tp ...]` or
+    `[sl ...]` when the auto-orders fired. This is what most MT5 brokers do
+    and was verified at 100% accuracy on a real Best Wing Global Markets
+    deals export.
+
+    Secondary signal (used when the comment is empty): compare `close_price`
+    to the `take_profit` / `stop_loss` values from the open, allowing a small
+    relative tolerance for slippage. The tolerance is relative to the entry
+    price so it scales correctly across instruments (e.g. gold near 4500 vs
+    EURUSD near 1.08).
+    """
+    c = (trade.comment or "").lower()
+    if "[tp" in c:
+        return "take_profit"
+    if "[sl" in c:
+        return "stop_loss"
+    tol = trade.open_price * relative_tolerance
+    if trade.take_profit and abs(trade.close_price - trade.take_profit) <= tol:
+        return "take_profit"
+    if trade.stop_loss and abs(trade.close_price - trade.stop_loss) <= tol:
+        return "stop_loss"
+    return "manual"
+
+
+def _window_days(snapshot: AccountSnapshot) -> float:
+    return (snapshot.end_time - snapshot.start_time).total_seconds() / 86400
+
+
+def total_profit_per_day(snapshot: AccountSnapshot) -> float | None:
+    """Net profit averaged over the window length, in dollars per day.
+
+    None when there are no trades or the window is non-positive (bad input).
+    The metric can be negative when the trader is losing.
+    """
+    if not snapshot.trades:
+        return None
+    days = _window_days(snapshot)
+    if days <= 0:
+        return None
+    return sum(t.profit for t in snapshot.trades) / days
+
+
+def profit_factor(snapshot: AccountSnapshot) -> float | None:
+    """Gross wins divided by absolute value of gross losses.
+
+    A profit factor of 1.0 is breakeven; 1.2 or above usually indicates a
+    real edge in retail trading. None when there are no trades. Returns
+    None (rather than infinity) when there are wins but no losses — the
+    sample is too one-sided to compute a meaningful ratio.
+    """
+    if not snapshot.trades:
+        return None
+    gross_wins = sum(t.profit for t in snapshot.trades if t.profit > 0)
+    gross_losses = sum(t.profit for t in snapshot.trades if t.profit < 0)
+    if gross_losses == 0:
+        # All wins or no wins at all — ratio is undefined / not informative.
+        return None
+    return gross_wins / abs(gross_losses)
+
+
+def biggest_single_win_share(snapshot: AccountSnapshot) -> float | None:
+    """Largest single winning trade's share of total gross wins.
+
+    Catches the "one lucky trade carries the P&L" case. A small share means
+    the edge is spread across many trades, which is the hallmark of a real
+    repeatable strategy. None when there are no winning trades.
+    """
+    wins = [t.profit for t in snapshot.trades if t.profit > 0]
+    if not wins:
+        return None
+    return max(wins) / sum(wins)
+
+
+def profitable_days_ratio(
+    snapshot: AccountSnapshot, *, min_trading_days: int = 3
+) -> float | None:
+    """Fraction of trading days whose net P&L is positive.
+
+    A trading day is any UTC date with at least one closed trade. The metric
+    requires at least `min_trading_days` distinct days in the snapshot to be
+    statistically meaningful; otherwise returns None.
+    """
+    if not snapshot.trades:
+        return None
+    daily: dict = defaultdict(float)
+    for t in snapshot.trades:
+        daily[t.close_time.date()] += t.profit
+    if len(daily) < min_trading_days:
+        return None
+    profitable = sum(1 for pnl in daily.values() if pnl > 0)
+    return profitable / len(daily)
+
+
+def manual_close_count(snapshot: AccountSnapshot) -> int:
+    """How many trades were closed manually (neither TP nor SL fired)."""
+    return sum(1 for t in snapshot.trades if derive_exit_reason(t) == "manual")
+
+
+def manual_close_win_rate(snapshot: AccountSnapshot) -> float | None:
+    """Fraction of manually-closed trades that ended profitable.
+
+    A skilled discretionary trader almost never manually closes a losing
+    trade — they let losers run to the stop. The metric is undefined when
+    there are no manual closes in the window.
+    """
+    manuals = [t for t in snapshot.trades if derive_exit_reason(t) == "manual"]
+    if not manuals:
+        return None
+    wins = sum(1 for t in manuals if t.profit > 0)
+    return wins / len(manuals)

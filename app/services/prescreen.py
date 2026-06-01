@@ -60,12 +60,24 @@ def _prescreen_bonus_abuse(snapshot: AccountSnapshot) -> bool:
     )
 
 
+def _prescreen_profitable_client_pattern(snapshot: AccountSnapshot) -> bool:
+    # The rule is about profitable clients with a real edge. With zero
+    # trades or a non-positive net profit, the rule cannot meaningfully
+    # fire: R1 (profit rate), R3 (winning-trade share) and R4 (profitable
+    # days) all need a winning, multi-trade account. Skipping the LLM
+    # for losing or empty accounts also saves tokens on the long tail.
+    if not snapshot.trades:
+        return False
+    return sum(t.profit for t in snapshot.trades) > 0
+
+
 # Map risk_key → callable. Adding a new risk = add a new entry here.
 _PRESCREENS: dict[str, Callable[[AccountSnapshot], bool]] = {
     "latency_arbitrage": _prescreen_latency_arbitrage,
     "scalping": _prescreen_scalping,
     "swap_arbitrage": _prescreen_swap_arbitrage,
     "bonus_abuse": _prescreen_bonus_abuse,
+    "profitable_client_pattern": _prescreen_profitable_client_pattern,
 }
 
 

@@ -37,6 +37,7 @@ async def test_empty_snapshot_skips_every_risk():
         "scalping": False,
         "swap_arbitrage": False,
         "bonus_abuse": False,
+        "profitable_client_pattern": False,
     }
 
 

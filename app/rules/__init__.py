@@ -15,7 +15,13 @@ from __future__ import annotations
 from typing import Callable
 
 from ..schemas import AccountSnapshot
-from . import bonus_abuse, latency_arbitrage, scalping, swap_arbitrage
+from . import (
+    bonus_abuse,
+    latency_arbitrage,
+    profitable_client_pattern,
+    scalping,
+    swap_arbitrage,
+)
 from .types import RuleOutcome, insufficient
 
 
@@ -24,6 +30,7 @@ EVALUATORS: dict[str, Callable[[AccountSnapshot], list[RuleOutcome]]] = {
     "scalping": scalping.evaluate,
     "swap_arbitrage": swap_arbitrage.evaluate,
     "bonus_abuse": bonus_abuse.evaluate,
+    "profitable_client_pattern": profitable_client_pattern.evaluate,
 }
 
 
@@ -33,6 +40,7 @@ __all__ = [
     "bonus_abuse",
     "insufficient",
     "latency_arbitrage",
+    "profitable_client_pattern",
     "scalping",
     "swap_arbitrage",
 ]
