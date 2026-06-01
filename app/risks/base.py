@@ -134,63 +134,87 @@ OUTPUT
   out or empty otherwise.
 
 EVIDENCE DESCRIPTION LIST
-This is the field a non-technical broker risk officer will actually
-read on their phone when an alert lands. They are NOT a developer and
-NOT a quant. They know how an MT5 account behaves, but they do not
-read code, do not know what `swap_profit_ratio` means, and do not want
-to look at JSON. Your job is to translate the rule_outcomes into
-plain business English they can act on in 30 seconds.
+The audience for this field is a customer support agent and the
+broker's risk officer. Neither person is a developer, a quant, or a
+trader. Some of them are juniors who have never seen a martingale
+strategy or heard the term "carry trade" before. Your job is to TEACH
+them what is going on, in the same friendly tone a senior colleague
+would use to explain a case over coffee, so they can:
+
+  * understand the trading pattern in 30 seconds, and
+  * answer the customer if the customer phones to ask "why did you
+    pause my account?".
+
+Plain conversational English. Short sentences. No risk-control
+vocabulary. If a concept needs a name (like "martingale", "scalping"),
+use the everyday meaning in the sentence, do not assume the reader
+already knows it.
 
 Produce exactly FOUR items, in this order, each prefixed with the
 bracket label shown:
 
-  1. "[WHAT] ..." — What happened in plain words. Use the actual
-     symbol, lot size, direction, and counts from the snapshot. For
-     example: "Account 250030 opened 39 sell positions on gold
-     (XAUUSD), all at 0.01 lots, between 8:16 PM and 9:55 PM UTC on
-     May 14." No jargon, no field names.
+  1. "[WHAT] ..." — A plain description of the trading activity.
+     Use simple counts and the instrument's everyday name (e.g.
+     "gold" for XAUUSD, "euro/dollar" for EURUSD). One or two
+     sentences. Example: "This account placed 39 small sell trades
+     on gold over about an hour and a half. Every trade was the same
+     tiny size and the trader did not set any safety prices to lock
+     in profit or limit loss."
 
-  2. "[WHY] ..." — Why the system reached this verdict. Name the rules
-     that fired in everyday words and explain in one or two sentences
-     what they mean. If only some rules fired (or none), be explicit
-     that the system did NOT confirm the risk and explain which checks
-     failed. For example: "Only one of the four latency-arbitrage
-     checks fired (trade count). The other three checks for short
-     holding time, mixed direction, and scattered exits all failed,
-     so the system correctly judged this as low risk for latency
-     arbitrage."
+  2. "[WHY] ..." — Why the system reached its verdict, in teaching
+     tone. Explain what the risk type means in everyday words (one
+     short sentence), then say in plain English which of the signs
+     the system looks for were present and which were not. If the
+     verdict is low, make it clear the account did NOT match this
+     risk and explain what would have been needed for a match. Two
+     to four sentences. Example for a low score: "Latency arbitrage
+     means a trader profits from being a fraction of a second faster
+     than the broker's price feed. The system looks for four signs
+     of that pattern. Only one of them was present here (the trader
+     was active). The other three were missing: positions were held
+     for many minutes not seconds, only one direction was traded,
+     and the trader did sometimes lose. So the system correctly
+     decided this was NOT latency arbitrage."
 
-  3. "[HOW] ..." — How the pattern was executed, described mechanically
-     so the officer recognises the trading style. Translate cross-trade
-     signals into images: "trades opened in rapid bursts then closed
-     all together at the same second", "positions added at worse and
-     worse prices, then closed in one click when price ticked back",
-     "held positions through midnight UTC to collect overnight
-     interest". Mention any signals that distinguish this from real
-     abuse if relevant. Two to four sentences.
+  3. "[HOW] ..." — How the trader did it, described in everyday
+     actions a colleague would picture. Forget metrics; describe the
+     trader's behaviour like you are narrating a video. If the
+     pattern looks like a known strategy that the reader might not
+     know, name it once and explain in the SAME sentence what it
+     means. Two to four sentences. Example: "The trader opened
+     several small short positions one after another in quick
+     bursts, then waited as the price moved against them. When the
+     price ticked back in their favour, they clicked once to close
+     many trades at the exact same moment. This is sometimes called
+     a 'martingale' or 'grid' strategy: keep stacking positions
+     against you and close them all together when the price wiggles
+     back, even slightly."
 
   4. "[WHEN] ..." — When in the window the activity happened. Use
-     clock times in plain language, total duration, and any
-     clustering. For example: "All activity took place in a tight 100
-     minute window starting at 8:16 PM UTC. Most positions were
-     opened in the first 30 minutes and closed in three big batches:
-     12 at 9:01:29 PM, 7 at 9:04:21 PM, and 10 at 9:41:16 PM." Use UTC
-     times from the window.
+     plain clock times the support agent can quote back to the
+     customer. One or two sentences. Example: "Everything happened
+     in a 100 minute window between 8:16 PM and 9:55 PM UTC on
+     May 14. The big group-close moments were at 9:01 PM, 9:04 PM,
+     9:41 PM, 9:45 PM and 9:55 PM."
 
 STYLE RULES for evidence_description_list
-- Each item is one short paragraph (1 to 4 sentences).
-- Plain English only. No code snippets. No field names like
-  `swap_profit_ratio`, `bid_at_open`, `R3`. No symbols like `>=`,
-  `<=`, `>`, `<`. Translate everything into words.
-- Always cite the concrete observed values from `rule_outcomes` so the
-  officer can verify against the raw data later. Numbers like
-  percentages and counts are fine; just write them as numbers.
-- Always lead with the bracket label exactly as shown: "[WHAT] ",
-  "[WHY] ", "[HOW] ", "[WHEN] ". No other prefix.
+- Each item is one short paragraph, max 4 sentences.
+- Plain conversational English. No code, no field names, no metric
+  names, no rule IDs (no "R3", no "swap_profit_ratio", no "minority
+  side ratio"). No math symbols (no >=, <=, >, <, %). Translate
+  numbers into words ("about 80%" or "8 out of 10", not "0.80").
+  Translate symbol codes to everyday names ("gold" not "XAUUSD"
+  unless you also include the everyday name).
+- Cite concrete numbers from `rule_outcomes` but say them naturally
+  ("39 trades", "around 35 minutes on average", "every single one of
+  the 39 trades").
+- Each item must start with the bracket label exactly as shown:
+  "[WHAT] ", "[WHY] ", "[HOW] ", "[WHEN] ". No other prefix.
 - Do NOT contradict rule_outcomes. If a rule did NOT fire, do not
   claim the pattern was present.
 - Do NOT include a numeric score, do NOT propose a level, do NOT
-  recommend an action. The system handles those separately.
+  recommend an action, do NOT tell the support agent what to do.
+  Just teach them what they are looking at.
 """
 
 
