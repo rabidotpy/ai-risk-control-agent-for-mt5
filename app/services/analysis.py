@@ -38,7 +38,12 @@ from ..risks import ALL_RISKS, Risk
 from ..rules import RuleOutcome
 from ..schemas import AccountSnapshot, RiskFinding
 from .prescreen import prescreen_snapshot
-from .scoring import compute_score, level_to_action, score_to_level
+from .scoring import (
+    compute_score,
+    dealing_desk_action,
+    level_to_action,
+    score_to_level,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -56,12 +61,29 @@ def _metric_name(rule: str) -> str:
 
 
 def _build_evidence(outcomes: list[RuleOutcome]) -> dict[str, Any]:
-    """Surface observed_value per rule, keyed by metric name."""
+    """Surface observed_value per rule, keyed by metric name.
+
+    Composite rules (whose observed_value is a dict) keep their nested
+    shape under the rule's metric name (back-compat) AND have their
+    inner scalars promoted as sibling top-level keys, so a consumer can
+    read e.g. `evidence.batch_close_ratio` directly without digging
+    into a nested object.
+    """
     out: dict[str, Any] = {}
     for o in outcomes:
         if o.observed_value is None:
             continue
-        out[_metric_name(o.rule)] = o.observed_value
+        key = _metric_name(o.rule)
+        out[key] = o.observed_value
+        # If observed_value is a dict (composite rule), also expose its
+        # inner scalars at the top level — but never overwrite an
+        # existing key (that could be the metric-name dict we just set,
+        # or a real value from another rule).
+        if isinstance(o.observed_value, dict):
+            for inner_key, inner_val in o.observed_value.items():
+                if inner_key in out:
+                    continue
+                out[inner_key] = inner_val
     return out
 
 
@@ -136,6 +158,7 @@ def _build_skipped_finding(
         # above carries the only signal needed for the audit trail.
         evidence_description_list=[],
         suggested_action=level_to_action("low"),
+        dealing_desk_action=dealing_desk_action(risk.key, "low"),
         analysis="prescreen: skipped LLM evaluation (no rule could trip)",
         behavior_summary=None,
     )
@@ -239,6 +262,7 @@ async def _evaluate_one(
         evidence=evidence,
         evidence_description_list=evidence_description_list,
         suggested_action=level_to_action(level),
+        dealing_desk_action=dealing_desk_action(risk.key, level),
         analysis=summary_text,
         behavior_summary=behavior_summary,
     )

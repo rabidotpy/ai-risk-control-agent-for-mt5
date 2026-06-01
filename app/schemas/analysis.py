@@ -108,5 +108,12 @@ class RiskFinding(BaseModel):
     # Empty when the risk was prescreen-skipped (no Python rules ran).
     evidence_description_list: list[str] = Field(default_factory=list)
     suggested_action: str
+    # Optional operational action for risks where the compliance-style
+    # `suggested_action` is the wrong framing (e.g. profitable_client_pattern,
+    # which should route to A-book, not lock the account down). Null for
+    # all the pure-compliance risks. Consumers reading `suggested_action`
+    # alone keep working unchanged; consumers that want the operational
+    # framing read this instead.
+    dealing_desk_action: str | None = None
     analysis: str
     behavior_summary: dict[str, Any] | None = None

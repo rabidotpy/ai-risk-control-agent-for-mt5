@@ -186,6 +186,11 @@ async def get_analyses(
                 "start_time": window_start.isoformat(),
             },
         )
+    # dealing_desk_action is computed on the fly from risk_key + risk_level
+    # so we don't need a new DB column. Operational signal for risks where
+    # the compliance-style suggested_action is not the right framing.
+    from ..services.scoring import dealing_desk_action
+
     return [
         {
             "mt5_login": r.mt5_login,
@@ -196,6 +201,7 @@ async def get_analyses(
             "evidence": r.evidence,
             "evidence_description_list": r.evidence_description_list or [],
             "suggested_action": r.suggested_action,
+            "dealing_desk_action": dealing_desk_action(r.risk_key, r.risk_level),
             "analysis": r.analysis,
             "behavior_summary": r.behavior_summary,
             "window_start": r.window_start.isoformat(),
