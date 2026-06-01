@@ -25,7 +25,10 @@ htmlcov/
 # --- Secrets / local config ---
 .env
 .env.*
-!.env.example
+
+# --- Database files ---
+risk_control.sqlite3
+risk_control.sqlite3.bak.*
 
 # --- IDE / OS ---
 .vscode/
